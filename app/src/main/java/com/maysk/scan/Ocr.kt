@@ -101,6 +101,27 @@ object Ocr {
         }
     }
 
+    /**
+     * Короткое название документа по его тексту: первые осмысленные строки верхней части страницы.
+     * Например «Исх. № 395 — Майская районная больница».
+     */
+    suspend fun quickTitle(ctx: Context, page: File): String? {
+        val full = ImageTools.decodeFile(page, 2000)
+        val top = Bitmap.createBitmap(full, 0, 0, full.width, maxOf(1, (full.height * 0.4f).toInt()))
+        if (top !== full) full.recycle()
+        val text = try { recognize(ctx, top, Prefs(ctx).ocrLang, true).text } finally { top.recycle() }
+        return titleFrom(text)
+    }
+
+    fun titleFrom(text: String): String? {
+        val good = text.lines().map { it.trim().trim('-', '—', '_', '.', ',', ':', '|') }
+            .filter { l -> l.length >= 4 && l.count { it.isLetter() } >= 3 && l.count { it.isLetterOrDigit() } * 2 >= l.length }
+        if (good.isEmpty()) return null
+        var title = good[0]
+        if (title.length < 25 && good.size > 1) title += " — " + good[1]
+        return Files.sanitize(title.replace(Regex("\\s+"), " ")).take(60).trim().ifBlank { null }
+    }
+
     /** Определение языка текста (модель встроена, без интернета). Возвращает код вроде "ru", "kk", "und". */
     suspend fun detect(text: String): String {
         if (text.isBlank()) return "und"

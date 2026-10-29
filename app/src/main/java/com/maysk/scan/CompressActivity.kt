@@ -106,7 +106,7 @@ class CompressActivity : BaseActivity() {
                 hideProgress()
                 if (out.length() >= src.length()) {
                     out.delete()
-                    AlertDialog.Builder(this@CompressActivity).setTitle("Сжатие")
+                    TrDialog(this@CompressActivity).setTitle("Сжатие")
                         .setMessage("Этот PDF уже хорошо сжат — уменьшить его не получилось. Попробуйте уровень «Максимальное сжатие».")
                         .setPositiveButton("OK", null).show()
                     return@launch
@@ -114,7 +114,7 @@ class CompressActivity : BaseActivity() {
                 withContext(Dispatchers.IO) { Files.exportCopy(this@CompressActivity, out) }
                 History.add(this@CompressActivity, Kind.PDF, out)
                 val saved = 100 - out.length() * 100 / src.length()
-                AlertDialog.Builder(this@CompressActivity).setTitle("Готово! −$saved%")
+                TrDialog(this@CompressActivity).setTitle("Готово! −$saved%")
                     .setMessage("До: ${formatSize(src.length())}\nПосле: ${formatSize(out.length())}")
                     .setPositiveButton("Открыть") { _, _ -> startActivity(Intent(this@CompressActivity, PdfViewerActivity::class.java).putExtra(EXTRA_FILE, out.absolutePath)); finish() }
                     .setNeutralButton("Поделиться") { _, _ -> share(listOf(out), "application/pdf") }

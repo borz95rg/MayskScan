@@ -42,6 +42,7 @@ class SplashActivity : BaseActivity() {
                 try { Ocr.ensureData(applicationContext) } catch (e: Exception) {}
                 Files.clearCache(applicationContext)
             }
+            TextIndex.scheduleMissing(applicationContext)
             val left = 900 - (System.currentTimeMillis() - started)
             if (left > 0) delay(left)
             startActivity(Intent(this@SplashActivity, MainActivity::class.java))

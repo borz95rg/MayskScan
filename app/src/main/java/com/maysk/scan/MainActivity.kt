@@ -29,6 +29,11 @@ class MainActivity : BaseActivity() {
     private var historyFilter: Kind? = null
     private var update: Updater.Info? = null
 
+    private val lockSetup = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { render() }
+    private val lockVerify = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == android.app.Activity.RESULT_OK) { Prefs(this).pinHash = ""; toast("Блокировка выключена") }
+        render()
+    }
     private val pickTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -61,7 +66,7 @@ class MainActivity : BaseActivity() {
                 if (tab == 0) render()
                 if (!Updater.dialogShown && !isFinishing) {
                     Updater.dialogShown = true
-                    AlertDialog.Builder(this@MainActivity)
+                    TrDialog(this@MainActivity)
                         .setTitle("Доступно обновление ${u.versionName}")
                         .setMessage("Вышла новая версия Maysk Scan. Нажмите «Обновить» — файл скачается, затем откройте его и нажмите «Установить». Все ваши документы сохранятся.")
                         .setPositiveButton("Обновить") { _, _ -> openUpdate(u) }
@@ -114,7 +119,7 @@ class MainActivity : BaseActivity() {
             }
             // Одинаковая «капсула» у всех пунктов, у выбранного — с подсветкой: ничего не съезжает
             val wrap = FrameLayout(this).apply {
-                if (sel) background = rounded(0x331E88FF, 14)
+                if (sel) background = rounded(Accent.soft(this@MainActivity), 14)
                 setPadding(dp(16), dp(3), dp(16), dp(3))
             }
             wrap.addView(icon(icon, 24, if (sel) R.color.accent else R.color.text2), FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
@@ -186,6 +191,8 @@ class MainActivity : BaseActivity() {
             Tile(R.drawable.ic_ocr, R.color.tile_green, "Фото → Текст", "OCR, 8 языков") { startActivity(Intent(this, OcrActivity::class.java)) },
             Tile(R.drawable.ic_pdf, R.color.tile_red, "Открыть PDF", "Просмотр и редактирование") { openPdf() },
             Tile(R.drawable.ic_qr, R.color.tile_purple, "QR / Штрихкод", "Сканировать и создать") { startActivity(Intent(this, QrActivity::class.java)) },
+            Tile(R.drawable.ic_doc, R.color.tile_teal, "Удостоверение / паспорт", "Обе стороны на A4") { startActivity(Intent(this, IdCardActivity::class.java)) },
+            Tile(R.drawable.ic_edit, R.color.tile_orange, "Заполнить форму", "PDF-бланки") { tool(FormActivity::class.java) },
         )
         addTiles(col, grid, 2, big = true)
 
@@ -278,7 +285,7 @@ class MainActivity : BaseActivity() {
 
     private fun history(col: LinearLayout, favoritesOnly: Boolean) {
         header(col, if (favoritesOnly) "Избранное" else "История")
-        val search = field("Поиск по названию…", historyQuery)
+        val search = field("Поиск по названию и тексту внутри…", historyQuery)
         col.addView(search)
         val listBox = vbox()
         if (!favoritesOnly) {
@@ -290,21 +297,37 @@ class MainActivity : BaseActivity() {
             col.addView(sc, lp().apply { topMargin = dp(12) })
         }
         col.addView(listBox, lp().apply { topMargin = dp(12) })
+        var job: kotlinx.coroutines.Job? = null
         fun fill() {
-            listBox.removeAllViews()
-            val q = historyQuery.trim().lowercase()
-            val list = History.all(this).filter {
-                (!favoritesOnly || it.favorite) &&
-                    (favoritesOnly || historyFilter == null || it.kind == historyFilter) &&
-                    (q.isEmpty() || it.name.lowercase().contains(q) || it.extra.lowercase().contains(q))
+            job?.cancel()
+            val q = historyQuery.trim()
+            val base = History.all(this).filter {
+                (!favoritesOnly || it.favorite) && (favoritesOnly || historyFilter == null || it.kind == historyFilter)
             }
-            if (list.isEmpty()) {
-                listBox.addView(text(if (favoritesOnly) "Здесь пока пусто.\nОтметьте файл звёздочкой в истории." else "Здесь пока ничего нет.\nОтсканируйте первый документ!", 15f, R.color.text2).apply {
-                    gravity = Gravity.CENTER
-                    setPadding(0, dp(60), 0, 0)
-                })
+            job = lifecycleScope.launch {
+                // Поиск по словам внутри документов — в фоне, из готового индекса
+                val found: List<Pair<Entry, String?>> = if (q.isEmpty()) base.map { it to null } else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    base.mapNotNull { e ->
+                        when {
+                            e.name.contains(q, true) -> e to null
+                            e.extra.contains(q, true) -> e to e.extra.take(80)
+                            else -> TextIndex.get(this@MainActivity, e)?.let { t -> TextIndex.snippet(t, q) }?.let { e to it }
+                        }
+                    }
+                }
+                listBox.removeAllViews()
+                if (found.isEmpty()) {
+                    listBox.addView(text(when {
+                        q.isNotEmpty() -> "Ничего не найдено по «$q».\nНовые сканы попадают в поиск через минуту после сохранения."
+                        favoritesOnly -> "Здесь пока пусто.\nОтметьте файл звёздочкой в истории."
+                        else -> "Здесь пока ничего нет.\nОтсканируйте первый документ!"
+                    }, 15f, R.color.text2).apply {
+                        gravity = Gravity.CENTER
+                        setPadding(0, dp(60), 0, 0)
+                    })
+                }
+                found.forEach { (e, snip) -> listBox.addView(entryRow(e, snip), lp().apply { bottomMargin = dp(8) }) }
             }
-            list.forEach { listBox.addView(entryRow(it), lp().apply { bottomMargin = dp(8) }) }
         }
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -327,7 +350,7 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun entryRow(e: Entry): View {
+    private fun entryRow(e: Entry, snippet: String? = null): View {
         val row = hbox().apply {
             setPadding(dp(12), dp(10), dp(6), dp(10))
             background = clickable(cardBg(16), 16)
@@ -340,6 +363,7 @@ class MainActivity : BaseActivity() {
         t.addView(text(e.name, 14.5f, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
         val sub = if (e.kind == Kind.QR) e.extra.take(60) else "${formatDate(e.created)} · ${formatSize(e.size)}"
         t.addView(text(sub, 12f, R.color.text2).apply { maxLines = 1 })
+        if (snippet != null) t.addView(text("«$snippet»", 12f, R.color.accent).apply { maxLines = 2; setPadding(0, dp(2), 0, 0) })
         row.addView(t, lp(0, WRAP, 1f))
         row.addView(iconButton(if (e.favorite) R.drawable.ic_star else R.drawable.ic_star_border, if (e.favorite) R.color.gold else R.color.text2) {
             e.favorite = !e.favorite
@@ -373,16 +397,49 @@ class MainActivity : BaseActivity() {
         header(col, "Настройки")
 
         col.addView(sectionTitle("ВНЕШНИЙ ВИД"))
-        col.addView(listRow(R.drawable.ic_moon, "Тёмная тема", null, switchView(prefs.darkTheme) { on ->
-            prefs.darkTheme = on
-            AppCompatDelegate.setDefaultNightMode(if (on) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
+        col.addView(listRow(R.drawable.ic_moon, "Тема", Accent.THEMES[prefs.themeMode.coerceIn(0, 2)]) {
+            choose("Тема", Accent.THEMES) { i ->
+                prefs.themeMode = i
+                prefs.darkTheme = i == 0
+                Accent.applyTheme(i)
+            }
+        })
+        // Цвет акцента: кружки
+        val colors = hbox().apply { setPadding(dp(14), dp(12), dp(14), dp(12)); background = cardBg(16); gravity = Gravity.CENTER_VERTICAL }
+        colors.addView(icon(R.drawable.ic_drop, 22, R.color.accent).apply { margins(context, r = 14) })
+        colors.addView(text("Цвет", 15f), lp(0, WRAP, 1f))
+        Accent.COLORS.forEachIndexed { i, o ->
+            val sel = i == prefs.accent
+            colors.addView(View(this).apply {
+                background = rounded(o.color, 15, if (sel) this@MainActivity.col(R.color.text) else null, 2)
+                contentDescription = o.name
+                setOnClickListener { Accent.set(this@MainActivity, i); recreate() }
+            }, LinearLayout.LayoutParams(dp(if (sel) 30 else 24), dp(if (sel) 30 else 24)).apply { leftMargin = dp(6) })
+        }
+        col.addView(colors, lp().apply { topMargin = dp(8) })
+        col.addView(listRow(R.drawable.ic_globe, "Язык интерфейса", I18n.LANGS.firstOrNull { it.first == prefs.uiLang }?.second ?: "Русский") {
+            choose("Язык интерфейса", I18n.LANGS.map { it.second }) { i ->
+                val code = I18n.LANGS[i].first
+                prefs.uiLang = code
+                I18n.load(this, code)
+                recreate()
+            }
+        }, lp().apply { topMargin = dp(8) })
+
+        col.addView(sectionTitle("БЕЗОПАСНОСТЬ"))
+        col.addView(listRow(R.drawable.ic_lock, "Блокировка входа", "PIN-код при открытии приложения", switchView(Lock.enabled(this)) { on ->
+            if (on && !Lock.enabled(this)) lockSetup.launch(Intent(this, LockActivity::class.java).putExtra("setup", true))
+            else if (!on && Lock.enabled(this)) lockVerify.launch(Intent(this, LockActivity::class.java).putExtra("verify", true))
         }))
-        col.addView(listRow(R.drawable.ic_globe, "Язык", null, text("Русский", 14f, R.color.text2)), lp().apply { topMargin = dp(8) })
+        if (Lock.enabled(this) && Lock.biometricAvailable(this)) {
+            col.addView(listRow(R.drawable.ic_unlock, "Вход по отпечатку пальца", null, switchView(prefs.biometric) { prefs.biometric = it }), lp().apply { topMargin = dp(8) })
+        }
 
         col.addView(sectionTitle("РАСПОЗНАВАНИЕ ТЕКСТА"))
         col.addView(listRow(R.drawable.ic_translate, "Язык распознавания", Ocr.nameOf(prefs.ocrLang)) { chooseOcrLang() })
         col.addView(listRow(R.drawable.ic_ai, "Автоулучшение изображения", "Убирать тени и выравнивать фон перед распознаванием", switchView(prefs.autoEnhance) { prefs.autoEnhance = it }), lp().apply { topMargin = dp(8) })
         col.addView(listRow(R.drawable.ic_grid, "Распознавание таблиц", "Предлагать сохранить таблицу в Excel/CSV", switchView(prefs.tables) { prefs.tables = it }), lp().apply { topMargin = dp(8) })
+        col.addView(listRow(R.drawable.ic_text, "Название по тексту", "Называть сканы по первым строкам документа", switchView(prefs.autoName) { prefs.autoName = it }), lp().apply { topMargin = dp(8) })
 
         col.addView(sectionTitle("СОХРАНЕНИЕ"))
         col.addView(listRow(R.drawable.ic_folder, "Копии в папку", prefs.exportTreeName.ifEmpty { "Не выбрана — файлы только в приложении" }) {
@@ -405,6 +462,9 @@ class MainActivity : BaseActivity() {
                 else openUpdate(u)
             }
         })
+        col.addView(listRow(R.drawable.ic_lock, "Политика конфиденциальности", null) {
+            startActivity(Intent(this, PrivacyActivity::class.java))
+        }, lp().apply { topMargin = dp(8) })
         col.addView(listRow(R.drawable.ic_share, "Поделиться приложением", null) {
             Files.shareText(this, "Maysk Scan — сканер документов, текст из фото, PDF и QR без интернета:\n${Updater.installUrl()}")
         }, lp().apply { topMargin = dp(8) })
@@ -429,7 +489,7 @@ object Opener {
         val name = e.file.name.lowercase()
         when {
             e.kind == Kind.QR -> {
-                AlertDialog.Builder(ctx).setTitle("QR-код").setMessage(e.extra)
+                TrDialog(ctx).setTitle("QR-код").setMessage(e.extra)
                     .setPositiveButton("Копировать") { _, _ -> Clip.copy(ctx, e.extra) }
                     .setNeutralButton("Открыть") { _, _ ->
                         try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.extra))) } catch (x: Exception) { ctx.toast("Это не ссылка") }

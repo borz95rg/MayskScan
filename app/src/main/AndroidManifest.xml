@@ -66,6 +66,17 @@
         <activity android:name=".ProtectActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".QrActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".SignatureActivity" android:exported="false" />
+        <activity android:name=".IdCardActivity" android:exported="false" />
+        <activity android:name=".FormActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".PrivacyActivity" android:exported="false" />
+        <activity android:name=".LockActivity" android:exported="false" android:excludeFromRecents="true" android:launchMode="singleTop" />
+
+        <receiver android:name=".ScanWidget" android:exported="false" android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_scan_info" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

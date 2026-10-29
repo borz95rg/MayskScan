@@ -259,7 +259,7 @@ class OcrActivity : BaseActivity() {
     }
 
     private fun offerTable(text: String) {
-        AlertDialog.Builder(this)
+        TrDialog(this)
             .setTitle("Похоже на таблицу")
             .setMessage("Сохранить распознанную таблицу в Excel?")
             .setPositiveButton("В Excel") { _, _ -> exportAs(text, "Таблица", "xlsx") }
@@ -273,7 +273,7 @@ class OcrActivity : BaseActivity() {
         val repl = field("Заменить на (необязательно)")
         box.addView(find)
         box.addView(repl, lp().apply { topMargin = dp(8) })
-        AlertDialog.Builder(this).setTitle("Поиск и замена").setView(box)
+        TrDialog(this).setTitle("Поиск и замена").setView(box)
             .setPositiveButton("Найти") { _, _ ->
                 val q = find.text.toString()
                 if (q.isEmpty()) return@setPositiveButton
@@ -310,7 +310,7 @@ class OcrActivity : BaseActivity() {
         if (text.isBlank()) return
         choose("Перевести на…", transLangs.map { it.second } + listOf("Қазақша (пока не поддерживается)")) { i ->
             if (i >= transLangs.size) {
-                AlertDialog.Builder(this).setTitle("Казахский язык")
+                TrDialog(this).setTitle("Казахский язык")
                     .setMessage("Перевод на казахский без интернета пока не поддерживается: такого языкового пакета нет у Google. Распознавание казахского текста работает.")
                     .setPositiveButton("OK", null).show()
                 return@choose
@@ -336,7 +336,7 @@ class OcrActivity : BaseActivity() {
                     transBox.visibility = View.VISIBLE
                 } catch (e: Exception) {
                     hideProgress()
-                    AlertDialog.Builder(this@OcrActivity).setTitle("Перевод")
+                    TrDialog(this@OcrActivity).setTitle("Перевод")
                         .setMessage("Не удалось подготовить перевод. Для первого перевода на этот язык нужен интернет (один раз).\n\n${e.message ?: ""}")
                         .setPositiveButton("OK", null).show()
                 } finally {
@@ -410,7 +410,7 @@ class OcrActivity : BaseActivity() {
                 }
                 History.add(this@OcrActivity, if (ext == "txt") Kind.OCR else Kind.CONVERT, out)
                 hideProgress()
-                AlertDialog.Builder(this@OcrActivity).setTitle("Готово")
+                TrDialog(this@OcrActivity).setTitle("Готово")
                     .setMessage("«${out.name}» сохранён в Истории.")
                     .setPositiveButton("Поделиться") { _, _ -> share(listOf(out), Files.mimeOf(out.name)) }
                     .setNeutralButton("На телефон…") { _, _ -> saveAs(out, Files.mimeOf(out.name)) }

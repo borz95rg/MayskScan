@@ -211,7 +211,7 @@ class PdfViewerActivity : BaseActivity() {
                     }
                     if (hits.isEmpty()) {
                         val noText = t.all { it.isBlank() }
-                        AlertDialog.Builder(this@PdfViewerActivity).setTitle("Поиск")
+                        TrDialog(this@PdfViewerActivity).setTitle("Поиск")
                             .setMessage(if (noText) "В этом PDF нет текста — это скан. Распознайте его: «Ещё» → «Распознать текст»." else "«$q» не найдено.")
                             .setPositiveButton("OK", null).show()
                     } else {
@@ -277,7 +277,7 @@ class PdfViewerActivity : BaseActivity() {
                 }
             }
         }
-        dialog = AlertDialog.Builder(this).setTitle("Страницы").setView(rv).setNegativeButton("Закрыть", null).show()
+        dialog = TrDialog(this).setTitle("Страницы").setView(rv).setNegativeButton("Закрыть", null).show()
     }
 
     // ---------- Ещё ----------
@@ -297,6 +297,7 @@ class PdfViewerActivity : BaseActivity() {
             "Разделить / извлечь страницы",
             "Печать",
             "Сохранить на телефон…",
+            "Заполнить форму",
         )
         choose(file.name, items) { i ->
             val f = workFile()
@@ -314,6 +315,7 @@ class PdfViewerActivity : BaseActivity() {
                 10 -> startActivity(Intent(this, MergeSplitActivity::class.java).putExtra("mode", "split").putExtra(EXTRA_FILE, f.absolutePath))
                 11 -> Printer.print(this, f)
                 12 -> saveAs(file, "application/pdf")
+                13 -> openTool(FormActivity::class.java, f)
             }
         }
     }

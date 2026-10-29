@@ -51,6 +51,35 @@ class Prefs(ctx: Context) {
 
     fun setBookmarks(key: String, pages: Set<Int>) = p.edit().putString("bm_$key", pages.sorted().joinToString(",")).apply()
 
+    /** Называть сканы по тексту документа. */
+    var autoName: Boolean
+        get() = p.getBoolean("auto_name", true)
+        set(v) = p.edit().putBoolean("auto_name", v).apply()
+
+    /** Тема: 0 — тёмная, 1 — светлая, 2 — как в системе. */
+    var themeMode: Int
+        get() = p.getInt("theme_mode", if (p.getBoolean("dark", true)) 0 else 1)
+        set(v) = p.edit().putInt("theme_mode", v).apply()
+
+    /** Цвет акцента (индекс в Accent.COLORS). */
+    var accent: Int
+        get() = p.getInt("accent", 0)
+        set(v) = p.edit().putInt("accent", v).apply()
+
+    /** Язык интерфейса: ru, kk, en. */
+    var uiLang: String
+        get() = p.getString("ui_lang", "ru") ?: "ru"
+        set(v) = p.edit().putString("ui_lang", v).apply()
+
+    /** Блокировка: хэш PIN-кода (пусто — выключена) и вход по отпечатку. */
+    var pinHash: String
+        get() = p.getString("pin_hash", "") ?: ""
+        set(v) = p.edit().putString("pin_hash", v).apply()
+
+    var biometric: Boolean
+        get() = p.getBoolean("biometric", true)
+        set(v) = p.edit().putBoolean("biometric", v).apply()
+
     var nightPdf: Boolean
         get() = p.getBoolean("night_pdf", false)
         set(v) = p.edit().putBoolean("night_pdf", v).apply()
@@ -94,6 +123,7 @@ object History {
         val e = Entry(System.currentTimeMillis() + list.size, kind, name, file.absolutePath, System.currentTimeMillis(), false, extra)
         list.add(e)
         save(ctx)
+        TextIndex.schedule(ctx, e)
         return e
     }
 
@@ -109,6 +139,7 @@ object History {
     fun delete(ctx: Context, e: Entry) {
         val list = load(ctx)
         list.removeAll { it.id == e.id }
+        TextIndex.delete(ctx, e)
         // Файл удаляем, только если на него больше не ссылаются
         if (list.none { it.path == e.path }) File(e.path).delete()
         save(ctx)

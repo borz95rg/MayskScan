@@ -129,7 +129,7 @@ class MergeSplitActivity : BaseActivity() {
                     "bookmarks" -> {
                         val sections = withContext(Dispatchers.IO) { PdfTools.bookmarkRanges(f) }
                         if (sections.isEmpty()) {
-                            AlertDialog.Builder(this@MergeSplitActivity).setTitle("Закладок нет")
+                            TrDialog(this@MergeSplitActivity).setTitle("Закладок нет")
                                 .setMessage("В этом PDF нет оглавления. Разделите по страницам или по диапазону.")
                                 .setPositiveButton("OK", null).show()
                         } else runSplit(f) { dir, base ->
@@ -156,7 +156,7 @@ class MergeSplitActivity : BaseActivity() {
                 }
                 parts.forEach { History.add(this@MergeSplitActivity, Kind.PDF, it) }
                 hideProgress()
-                AlertDialog.Builder(this@MergeSplitActivity).setTitle("Готово")
+                TrDialog(this@MergeSplitActivity).setTitle("Готово")
                     .setMessage("Получилось файлов: ${parts.size}. Они в Истории.")
                     .setPositiveButton("Поделиться всеми") { _, _ -> share(parts, "application/pdf") }
                     .setNegativeButton("Закрыть", null).show()

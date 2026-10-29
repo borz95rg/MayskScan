@@ -151,7 +151,7 @@ class ConvertActivity : BaseActivity() {
         if (out.name.endsWith(".zip") && lastImages.isNotEmpty()) {
             val imgs = lastImages
             lastImages = emptyList()
-            AlertDialog.Builder(this).setTitle("Готово")
+            TrDialog(this).setTitle("Готово")
                 .setMessage("Страниц: ${imgs.size}. Картинки сохранены одним ZIP-архивом в Истории.")
                 .setPositiveButton("Отправить картинки") { _, _ -> share(imgs, Files.mimeOf(imgs[0].name)) }
                 .setNeutralButton("Отправить ZIP") { _, _ -> share(listOf(out), "application/zip") }
@@ -159,7 +159,7 @@ class ConvertActivity : BaseActivity() {
                 .show()
             return
         }
-        val b = AlertDialog.Builder(this).setTitle("Готово")
+        val b = TrDialog(this).setTitle("Готово")
             .setMessage("«${out.name}» (${formatSize(out.length())}) сохранён в Истории.")
             .setPositiveButton("Открыть") { _, _ ->
                 if (out.name.endsWith(".pdf")) startActivity(Intent(this, PdfViewerActivity::class.java).putExtra(EXTRA_FILE, out.absolutePath))

@@ -9,9 +9,9 @@ class App : Application() {
         super.onCreate()
         DummyCtx.app = applicationContext
         // Тёмная тема по умолчанию, светлую можно включить в настройках
-        AppCompatDelegate.setDefaultNightMode(
-            if (Prefs(this).darkTheme) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
-        )
+        Accent.applyTheme(Prefs(this).themeMode)
+        I18n.init(this)
         PDFBoxResourceLoader.init(applicationContext)
+        Lock.init(this)
     }
 }

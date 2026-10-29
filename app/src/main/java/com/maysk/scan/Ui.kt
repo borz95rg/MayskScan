@@ -41,7 +41,13 @@ import java.io.File
 
 fun Context.dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
 fun Context.dpf(v: Float): Float = v * resources.displayMetrics.density
-fun Context.col(@ColorRes id: Int): Int = ContextCompat.getColor(this, id)
+fun Context.col(@ColorRes id: Int): Int = when (id) {
+    // Цвет акцента выбирается в настройках
+    R.color.accent -> Accent.color(this)
+    R.color.accent2 -> Accent.dark(this)
+    R.color.glow -> Accent.glow(this)
+    else -> ContextCompat.getColor(this, id)
+}
 
 fun Context.fontBold(): Typeface = ResourcesCompat.getFont(this, R.font.montserrat_bold) ?: Typeface.DEFAULT_BOLD
 fun Context.fontHeavy(): Typeface = ResourcesCompat.getFont(this, R.font.montserrat_extrabold) ?: Typeface.DEFAULT_BOLD
@@ -75,7 +81,7 @@ fun Context.clickable(bg: Drawable, radiusDp: Int = 20): Drawable {
 
 fun Context.text(s: CharSequence, sp: Float = 15f, @ColorRes color: Int = R.color.text, bold: Boolean = false, heavy: Boolean = false): TextView =
     TextView(this).apply {
-        text = s
+        text = if (s is String) I18n.tr(s) else s
         setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
         setTextColor(col(color))
         if (heavy) typeface = fontHeavy() else if (bold) typeface = fontBold()
@@ -218,7 +224,7 @@ fun Context.switchView(on: Boolean, onChange: (Boolean) -> Unit): androidx.appco
     }
 
 fun Context.field(hint: String, value: String = "", multiline: Boolean = false): EditText = EditText(this).apply {
-    this.hint = hint
+    this.hint = I18n.tr(hint)
     setText(value)
     setTextColor(col(R.color.text))
     setHintTextColor(col(R.color.text2))
@@ -238,12 +244,12 @@ fun Context.sectionTitle(s: String): TextView = text(s, 13f, R.color.text2, bold
     setPadding(dp(4), dp(18), dp(4), dp(8))
 }
 
-fun Context.toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+fun Context.toast(s: String) = Toast.makeText(this, I18n.tr(s), Toast.LENGTH_SHORT).show()
 
 fun formatSize(bytes: Long): String = when {
-    bytes >= 1024L * 1024 -> String.format(java.util.Locale("ru"), "%.1f МБ", bytes / 1048576.0)
-    bytes >= 1024 -> String.format(java.util.Locale("ru"), "%.1f КБ", bytes / 1024.0)
-    else -> "$bytes Б"
+    bytes >= 1024L * 1024 -> String.format(java.util.Locale("ru"), if (I18n.lang == "en") "%.1f MB" else "%.1f МБ", bytes / 1048576.0)
+    bytes >= 1024 -> String.format(java.util.Locale("ru"), if (I18n.lang == "en") "%.1f KB" else "%.1f КБ", bytes / 1024.0)
+    else -> if (I18n.lang == "en") "$bytes B" else "$bytes Б"
 }
 
 fun formatDate(ms: Long): String = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale("ru")).format(java.util.Date(ms))
@@ -287,6 +293,22 @@ open class BaseActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawable(ColorDrawable(col(R.color.bg)))
+    }
+
+    override fun setContentView(view: View?) {
+        super.setContentView(view)
+        // Перевод надписей, выставленных напрямую (язык интерфейса — в настройках)
+        if (I18n.lang != "ru" && view != null) {
+            view.viewTreeObserver.addOnGlobalLayoutListener { I18n.translateTree(view) }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Блокировка входа (PIN / отпечаток)
+        if (this !is LockActivity && this !is SplashActivity && Lock.needed(this)) {
+            startActivity(android.content.Intent(this, LockActivity::class.java))
+        }
     }
 
     /** Экран с верхней панелью. Возвращает контейнер для содержимого. */
@@ -391,10 +413,10 @@ open class BaseActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(dp(40), dp(40)))
             progressText = text(msg, 15f).apply { setPadding(dp(16), 0, 0, 0) }
             box.addView(progressText, lp(0, WRAP_CONTENT, 1f))
-            progress = AlertDialog.Builder(this).setView(box).setCancelable(false).create()
+            progress = TrDialog(this).setView(box).setCancelable(false).create()
             progress?.show()
         } else {
-            progressText?.text = msg
+            progressText?.text = I18n.tr(msg)
         }
     }
 
@@ -404,7 +426,7 @@ open class BaseActivity : AppCompatActivity() {
     }
 
     fun confirm(title: String, message: String, yes: String = "Да", action: () -> Unit) {
-        AlertDialog.Builder(this).setTitle(title).setMessage(message)
+        TrDialog(this).setTitle(title).setMessage(message)
             .setPositiveButton(yes) { _, _ -> action() }
             .setNegativeButton("Отмена", null).show()
     }
@@ -412,13 +434,13 @@ open class BaseActivity : AppCompatActivity() {
     fun ask(title: String, hint: String, value: String = "", inputType: Int = InputType.TYPE_CLASS_TEXT, ok: (String) -> Unit) {
         val f = field(hint, value).apply { this.inputType = inputType }
         val box = FrameLayout(this).apply { setPadding(dp(20), dp(8), dp(20), 0); addView(f) }
-        AlertDialog.Builder(this).setTitle(title).setView(box)
+        TrDialog(this).setTitle(title).setView(box)
             .setPositiveButton("OK") { _, _ -> ok(f.text.toString()) }
             .setNegativeButton("Отмена", null).show()
     }
 
     fun choose(title: String, items: List<String>, cb: (Int) -> Unit) {
-        AlertDialog.Builder(this).setTitle(title)
+        TrDialog(this).setTitle(title)
             .setItems(items.toTypedArray()) { _, which -> cb(which) }
             .setNegativeButton("Отмена", null).show()
     }
@@ -430,6 +452,6 @@ open class BaseActivity : AppCompatActivity() {
             e.message?.contains("password", true) == true -> "Файл защищён паролем или пароль неверный."
             else -> e.message ?: e.javaClass.simpleName
         }
-        AlertDialog.Builder(this).setTitle("Не получилось").setMessage(msg).setPositiveButton("OK", null).show()
+        TrDialog(this).setTitle("Не получилось").setMessage(msg).setPositiveButton("OK", null).show()
     }
 }

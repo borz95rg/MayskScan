@@ -94,12 +94,13 @@ class ScanActivity : BaseActivity() {
         // Действия со страницей
         body.addView(actionRow(
             actionButton(R.drawable.ic_rotate, "Повернуть") { rotateCurrent() },
+            actionButton(R.drawable.ic_split, "Разворот") { splitSpread() },
             actionButton(R.drawable.ic_delete, "Удалить") { deleteCurrent() },
             actionButton(R.drawable.ic_ocr, "Текст") { toOcr() },
-            actionButton(R.drawable.ic_share, "Поделиться") { shareAll() },
         ), lp().apply { topMargin = dp(10) })
         body.addView(actionRow(
-            actionButton(R.drawable.ic_image, "Сохранить JPG") { saveImages() },
+            actionButton(R.drawable.ic_share, "Поделиться") { shareAll() },
+            actionButton(R.drawable.ic_image, "JPG") { saveImages() },
             actionButton(R.drawable.ic_pdf, "Сохранить PDF", highlighted = true) { savePdf() },
         ), lp().apply { topMargin = dp(8) })
 
@@ -130,7 +131,7 @@ class ScanActivity : BaseActivity() {
 
     /** Если сканер Google недоступен (нет сервисов Google) — снимок камерой или фото из галереи. */
     private fun fallback() {
-        AlertDialog.Builder(this)
+        TrDialog(this)
             .setTitle("Сканер")
             .setMessage("Автоматический сканер недоступен на этом телефоне. Сфотографируйте документ или выберите фото — приложение само уберёт тени и выровняет фон.")
             .setPositiveButton("Камера") { _, _ -> photo { uri -> if (uri != null) addUris(listOf(uri), Filter.ENHANCE) else if (pages.isEmpty()) finish() } }
@@ -277,7 +278,7 @@ class ScanActivity : BaseActivity() {
     private fun savePdf() {
         if (pages.isEmpty()) return
         choose("Сохранить PDF", listOf("Обычный PDF", "PDF с текстом (можно искать и копировать)")) { mode ->
-            ask("Название документа", "Название", defaultName()) { name ->
+            suggestName { suggested -> ask("Название документа", "Название", suggested) { name ->
                 val base = name.ifBlank { defaultName() }
                 lifecycleScope.launch {
                     showProgress(if (mode == 1) "Распознаю текст…" else "Создаю PDF…")
@@ -301,8 +302,98 @@ class ScanActivity : BaseActivity() {
                         fail(e)
                     }
                 }
-            }
+            } }
         }
+    }
+
+    private var suggested: String? = null
+
+    /** Название по тексту первой страницы (если включено в настройках). */
+    private fun suggestName(cb: (String) -> Unit) {
+        suggested?.let { cb(it); return }
+        if (!Prefs(this).autoName || pages.isEmpty()) { cb(defaultName()); return }
+        lifecycleScope.launch {
+            showProgress("Придумываю название по тексту…")
+            val t = try { Ocr.quickTitle(this@ScanActivity, finalFile(pages[0])) } catch (e: Throwable) { null }
+            hideProgress()
+            val name = t ?: defaultName()
+            suggested = name
+            cb(name)
+        }
+    }
+
+    /** Разворот книги/журнала — на две отдельные страницы (по линии сгиба). */
+    private fun splitSpread() {
+        if (busy || pages.isEmpty()) return
+        val p = pages[current]
+        busy = true
+        lifecycleScope.launch {
+            showProgress("Делю разворот…")
+            try {
+                val halves = withContext(Dispatchers.IO) {
+                    val bmp = ImageTools.decodeFile(finalFile(p), 3200)
+                    val x = gutter(bmp)
+                    val left = Bitmap.createBitmap(bmp, 0, 0, x, bmp.height)
+                    val right = Bitmap.createBitmap(bmp, x, 0, bmp.width - x, bmp.height)
+                    val files = listOf(left, right).mapIndexed { i, b ->
+                        val f = File(cacheDir, "half_${System.nanoTime()}_$i.jpg")
+                        ImageTools.saveJpeg(b, f, 92)
+                        b.recycle()
+                        Page(f, Filter.ORIGINAL)
+                    }
+                    bmp.recycle()
+                    files
+                }
+                pages.removeAt(current)
+                pages.addAll(current, halves)
+                suggested = null
+                hideProgress()
+                toast("Разворот разделён на 2 страницы")
+            } catch (e: Throwable) {
+                fail(e)
+            }
+            busy = false
+            refresh()
+        }
+    }
+
+    /** Ищет линию сгиба: самый тёмный вертикальный столбец в средней части; иначе — середина. */
+    private fun gutter(b: Bitmap): Int {
+        val w = b.width
+        val h = b.height
+        val from = (w * 0.35f).toInt()
+        val to = (w * 0.65f).toInt()
+        val step = maxOf(1, h / 300)
+        val row = IntArray(w)
+        val sums = DoubleArray(to - from)
+        var y = (h * 0.1f).toInt()
+        var rows = 0
+        while (y < h * 0.9f) {
+            b.getPixels(row, 0, w, 0, y, w, 1)
+            for (x in from until to) {
+                val c = row[x]
+                sums[x - from] += (((c shr 16) and 255) + ((c shr 8) and 255) + (c and 255)) / 3.0
+            }
+            rows++
+            y += step
+        }
+        if (rows == 0) return w / 2
+        // сглаживаем, чтобы буквы не путались со сгибом
+        val k = maxOf(2, w / 200)
+        var best = w / 2
+        var bestV = Double.MAX_VALUE
+        var avg = 0.0
+        for (i in sums.indices) {
+            var s = 0.0
+            var n = 0
+            for (j in maxOf(0, i - k)..minOf(sums.size - 1, i + k)) { s += sums[j]; n++ }
+            val v = s / n / rows
+            avg += sums[i] / rows
+            if (v < bestV) { bestV = v; best = from + i }
+        }
+        avg /= sums.size
+        // Сгиб должен быть заметно темнее фона, иначе режем ровно посередине
+        return if (avg - bestV > 12) best else w / 2
     }
 
     private fun saveImages() {
@@ -310,7 +401,7 @@ class ScanActivity : BaseActivity() {
         lifecycleScope.launch {
             showProgress("Сохраняю…")
             try {
-                val base = defaultName()
+                val base = suggested ?: defaultName()
                 val saved = withContext(Dispatchers.IO) {
                     pages.mapIndexed { i, p ->
                         val out = Files.newDoc(this@ScanActivity, if (pages.size > 1) "$base-${i + 1}" else base, "jpg")
@@ -335,7 +426,7 @@ class ScanActivity : BaseActivity() {
             lifecycleScope.launch {
                 showProgress("Создаю PDF…")
                 try {
-                    val out = File(cacheDir, Files.sanitize(defaultName()) + ".pdf")
+                    val out = File(cacheDir, Files.sanitize(suggested ?: defaultName()) + ".pdf")
                     withContext(Dispatchers.IO) { PdfTools.imagesToPdf(pages.map { finalFile(it) }, out, fitA4 = false) }
                     hideProgress()
                     share(listOf(out), "application/pdf")
@@ -352,7 +443,7 @@ class ScanActivity : BaseActivity() {
     }
 
     private fun done(f: File) {
-        AlertDialog.Builder(this)
+        TrDialog(this)
             .setTitle("Готово!")
             .setMessage("«${f.name}» сохранён (${formatSize(f.length())}). Он есть в Истории.")
             .setPositiveButton("Открыть") { _, _ -> startActivity(Intent(this, PdfViewerActivity::class.java).putExtra(EXTRA_FILE, f.absolutePath)) }
