@@ -18,17 +18,20 @@ android {
         versionName = "1.0.$buildNumber"
         buildConfigField("String", "SUPABASE_URL", "\"${findProperty("mayskscan.supabaseUrl") ?: ""}\"")
         buildConfigField("String", "SUPABASE_KEY", "\"${findProperty("mayskscan.supabaseKey") ?: ""}\"")
-        // Только телефоны/планшеты ARM — меньше размер APK
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildFeatures {
         buildConfig = true
     }
 
-    // Языки распознавания не сжимаем — так они быстрее копируются при первом запуске
-    androidResources {
-        noCompress += listOf("traineddata", "ttf")
+    // Отдельный APK для 64-битных (почти все телефоны) и 32-битных телефонов — меньше размер
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
     }
 
     // Ключ подписи хранится только в секретах GitHub (KEYSTORE_BASE64 и KEYSTORE_PASSWORD).
@@ -58,6 +61,8 @@ android {
     }
 
     packaging {
+        // Сжимать нативные библиотеки внутри APK (файл заметно меньше)
+        jniLibs { useLegacyPackaging = true }
         resources {
             excludes += listOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/*.kotlin_module")
         }
