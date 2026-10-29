@@ -139,7 +139,7 @@ class PdfAnnotateActivity : BaseActivity() {
         }
         chips()
         box.addView(colors)
-        androidx.appcompat.app.TrDialog(this).setTitle("Добавить текст").setView(box)
+        TrDialog(this).setTitle("Добавить текст").setView(box)
             .setPositiveButton("Добавить") { _, _ ->
                 val t = f.text.toString().trim()
                 if (t.isNotEmpty()) view.add(Ann.Text(t, color, 0.035f))
