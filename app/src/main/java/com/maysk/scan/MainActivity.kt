@@ -46,16 +46,29 @@ class MainActivity : BaseActivity() {
         content = FrameLayout(this)
         root.addView(content, lp(MATCH, 0, 1f))
         nav = hbox().apply {
-            setPadding(dp(8), dp(6), dp(8), dp(8))
-            background = rounded(col(R.color.bg2), 0, col(R.color.stroke))
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setBackgroundColor(col(R.color.bg2))
+            gravity = Gravity.CENTER_VERTICAL
         }
+        root.addView(View(this).apply { setBackgroundColor(col(R.color.stroke)) }, lp(MATCH, dp(1)))
         root.addView(nav, lp())
         setContentView(root)
         buildNav()
         render()
         lifecycleScope.launch {
             update = Updater.check()
-            if (update != null && tab == 0) render()
+            update?.let { u ->
+                if (tab == 0) render()
+                if (!Updater.dialogShown && !isFinishing) {
+                    Updater.dialogShown = true
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Доступно обновление ${u.versionName}")
+                        .setMessage("Вышла новая версия Maysk Scan. Нажмите «Обновить» — файл скачается, затем откройте его и нажмите «Установить». Все ваши документы сохранятся.")
+                        .setPositiveButton("Обновить") { _, _ -> openUpdate(u) }
+                        .setNegativeButton("Позже", null)
+                        .show()
+                }
+            }
         }
     }
 
@@ -74,6 +87,15 @@ class MainActivity : BaseActivity() {
         if (tab != 0) { tab = 0; buildNav(); render() } else @Suppress("DEPRECATION") super.onBackPressed()
     }
 
+    private fun openUpdate(u: Updater.Info) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u.url)))
+            toast("Скачивается версия ${u.versionName}. Откройте файл и нажмите «Установить»")
+        } catch (e: Exception) {
+            toast("Нет браузера для скачивания")
+        }
+    }
+
     private fun buildNav() {
         nav.removeAllViews()
         val items = listOf(
@@ -90,13 +112,16 @@ class MainActivity : BaseActivity() {
                 background = clickable(android.graphics.drawable.ColorDrawable(0), 16)
                 setOnClickListener { tab = i; buildNav(); render() }
             }
-            val ic = icon(icon, 24, if (sel) R.color.accent else R.color.text2)
-            if (sel) {
-                val wrap = FrameLayout(this).apply { background = rounded(0x331E88FF, 14); setPadding(dp(12), dp(3), dp(12), dp(3)) }
-                wrap.addView(ic)
-                box.addView(wrap)
-            } else box.addView(ic)
-            box.addView(text(label, 11.5f, if (sel) R.color.accent else R.color.text2, bold = sel).apply { setPadding(0, dp(3), 0, 0) })
+            // Одинаковая «капсула» у всех пунктов, у выбранного — с подсветкой: ничего не съезжает
+            val wrap = FrameLayout(this).apply {
+                if (sel) background = rounded(0x331E88FF, 14)
+                setPadding(dp(16), dp(3), dp(16), dp(3))
+            }
+            wrap.addView(icon(icon, 24, if (sel) R.color.accent else R.color.text2), FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+            box.addView(wrap, lp(WRAP, WRAP))
+            box.addView(text(label, 11.5f, if (sel) R.color.accent else R.color.text2, bold = sel).apply {
+                setPadding(0, dp(3), 0, 0); maxLines = 1; gravity = Gravity.CENTER
+            }, lp(WRAP, WRAP))
             nav.addView(box, lp(0, WRAP, 1f))
         }
     }
@@ -139,7 +164,7 @@ class MainActivity : BaseActivity() {
             t.addView(text("Доступно обновление ${u.versionName}", 15f, bold = true))
             t.addView(text("Нажмите, чтобы скачать", 12.5f, R.color.text2))
             card.addView(t, lp(0, WRAP, 1f))
-            card.setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u.url))) }
+            card.setOnClickListener { openUpdate(u) }
             col.addView(card, lp().apply { bottomMargin = dp(14) })
         }
 
@@ -377,7 +402,7 @@ class MainActivity : BaseActivity() {
             lifecycleScope.launch {
                 val u = Updater.check()
                 if (u == null) toast("У вас последняя версия")
-                else startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u.url)))
+                else openUpdate(u)
             }
         })
         col.addView(listRow(R.drawable.ic_share, "Поделиться приложением", null) {

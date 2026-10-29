@@ -245,14 +245,16 @@ class OcrActivity : BaseActivity() {
         return f
     }
 
+    /** «Сохранить»: сразу выбор формата (Word первым), затем название. */
     private fun saveTxt() {
         val text = editor.text.toString()
-        if (text.isBlank()) return
-        ask("Сохранить текст", "Название", autoName(text)) { n ->
-            val f = saveTextFile(text, n.ifBlank { autoName(text) })
-            Files.exportCopy(this, f)
-            History.add(this, Kind.OCR, f)
-            toast("Сохранено в Истории")
+        if (text.isBlank()) { toast("Сначала распознайте текст"); return }
+        val formats = listOf("Word (DOCX)", "PDF", "Текст (TXT)", "Excel (XLSX)")
+        val exts = listOf("docx", "pdf", "txt", "xlsx")
+        choose("Сохранить как…", formats) { i ->
+            ask("Название файла", "Название", autoName(text)) { n ->
+                exportAs(text, "Текст", exts[i], n.trim().ifBlank { autoName(text) })
+            }
         }
     }
 
@@ -387,11 +389,11 @@ class OcrActivity : BaseActivity() {
         choose("Экспорт в…", formats) { i -> exportAs(text, title, exts[i]) }
     }
 
-    private fun exportAs(text: String, title: String, ext: String) {
+    private fun exportAs(text: String, title: String, ext: String, name: String? = null) {
         lifecycleScope.launch {
             showProgress("Создаю файл…")
             try {
-                val base = autoName(text)
+                val base = Files.sanitize(name ?: autoName(text))
                 val out = Files.newDoc(this@OcrActivity, base, ext)
                 withContext(Dispatchers.IO) {
                     when (ext) {

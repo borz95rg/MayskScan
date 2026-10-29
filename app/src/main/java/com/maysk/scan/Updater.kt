@@ -22,6 +22,9 @@ import java.net.URL
  * Новая версия скачивается через браузер — приложение само ничего не устанавливает.
  */
 object Updater {
+    /** Показывали ли уже окно об обновлении в этот запуск приложения. */
+    var dialogShown = false
+
     class Info(val versionCode: Int, val versionName: String, val url: String)
 
     fun installUrl(): String = "${BuildConfig.SUPABASE_URL}/storage/v1/object/public/releases/MayskScan.apk"
@@ -43,7 +46,10 @@ object Updater {
             }
             val code = map["scan_version_code"]?.toIntOrNull() ?: return@withContext null
             if (code <= BuildConfig.VERSION_CODE) return@withContext null
-            Info(code, map["scan_version_name"] ?: "", map["scan_apk_url"]?.ifEmpty { null } ?: installUrl())
+            var link = map["scan_apk_url"]?.ifEmpty { null } ?: installUrl()
+            // Старые 32-битные телефоны получают свою версию APK
+            if (android.os.Build.SUPPORTED_64_BIT_ABIS.isEmpty()) link = link.replace("MayskScan.apk", "MayskScan-32bit.apk")
+            Info(code, map["scan_version_name"] ?: "", link)
         } catch (e: Exception) {
             null // нет интернета — просто молчим
         }

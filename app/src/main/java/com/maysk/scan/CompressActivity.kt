@@ -51,7 +51,7 @@ class CompressActivity : BaseActivity() {
                 PdfTools.Level.LOSSLESS -> "Только очистка, качество не меняется"
                 PdfTools.Level.HIGH -> "200 dpi — для печати"
                 PdfTools.Level.MEDIUM -> "150 dpi — для почты и мессенджеров"
-                PdfTools.Level.MAX -> "100 dpi — самый маленький файл"
+                PdfTools.Level.MAX -> "100 dpi — самый маленький файл (текст может стать картинкой)"
             }, 12f, R.color.text2))
             row.addView(tt, lp(0, WRAP, 1f))
             val sz = text("…", 14f, R.color.text2, bold = true)

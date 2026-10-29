@@ -267,6 +267,42 @@ object PdfTools {
             doc.documentInformation?.let { it.producer = "Maysk Scan" }
             doc.save(out)
         }
+        // Если умное сжатие почти ничего не дало (сканы, векторная графика, шрифты),
+        // для среднего и максимального уровня пробуем «как скан»: каждая страница — картинка.
+        if ((level == Level.MEDIUM || level == Level.MAX) && out.length() > src.length() * 0.7) {
+            val tmp = File(out.parentFile, "raster_${System.nanoTime()}.pdf")
+            try {
+                rasterize(src, level.dpi, level.quality, tmp, onPage)
+                if (tmp.length() in 1 until out.length()) tmp.copyTo(out, true)
+            } catch (e: Throwable) {
+                // защищённый или необычный файл — оставляем результат умного сжатия
+            } finally {
+                tmp.delete()
+            }
+        }
+    }
+
+    /** Каждая страница рисуется в картинку JPEG с нужным dpi и собирается в новый PDF. */
+    fun rasterize(src: File, dpi: Int, quality: Float, out: File, onPage: (Int, Int) -> Unit = { _, _ -> }) {
+        PdfRender(src).use { r ->
+            PDDocument().use { doc ->
+                val n = r.pageCount
+                for (i in 0 until n) {
+                    onPage(i + 1, n)
+                    val (wPt, hPt) = r.pageSize(i)
+                    var widthPx = (wPt / 72f * dpi).roundToInt().coerceIn(200, 2500)
+                    if (widthPx.toLong() * (widthPx.toLong() * hPt / max(1, wPt)) > 9_000_000L) widthPx = (widthPx * 0.7f).roundToInt()
+                    val bmp = r.render(i, widthPx)
+                    val page = PDPage(PDRectangle(wPt.toFloat(), hPt.toFloat()))
+                    doc.addPage(page)
+                    val img = JPEGFactory.createFromImage(doc, bmp, quality)
+                    PDPageContentStream(doc, page).use { cs -> cs.drawImage(img, 0f, 0f, wPt.toFloat(), hPt.toFloat()) }
+                    bmp.recycle()
+                }
+                doc.documentInformation.producer = "Maysk Scan"
+                doc.save(out)
+            }
+        }
     }
 
     private fun recompress(doc: PDDocument, res: PDResources, pageW: Float, pageH: Float, level: Level, done: HashSet<Any>, depth: Int) {
