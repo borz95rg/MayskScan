@@ -369,10 +369,11 @@ open class BaseActivity : AppCompatActivity() {
     /** Снимок камерой телефона во временный файл. */
     fun photo(cb: (Uri?) -> Unit) = withCamera {
         val f = File(cacheDir, "photo_${System.currentTimeMillis()}.jpg")
-        photoUri = FileProvider.getUriForFile(this, "$packageName.files", f)
+        val uri = FileProvider.getUriForFile(this, "$packageName.files", f)
+        photoUri = uri
         onPhoto = cb
         try {
-            takePhoto.launch(photoUri)
+            takePhoto.launch(uri)
         } catch (e: Exception) {
             toast("Нет приложения камеры")
         }
