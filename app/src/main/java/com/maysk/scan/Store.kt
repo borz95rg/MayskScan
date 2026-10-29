@@ -51,6 +51,11 @@ class Prefs(ctx: Context) {
 
     fun setBookmarks(key: String, pages: Set<Int>) = p.edit().putString("bm_$key", pages.sorted().joinToString(",")).apply()
 
+    /** Обрезать лист и выравнивать строки на обычных фото. */
+    var autoCrop: Boolean
+        get() = p.getBoolean("auto_crop", true)
+        set(v) = p.edit().putBoolean("auto_crop", v).apply()
+
     /** Называть сканы по тексту документа. */
     var autoName: Boolean
         get() = p.getBoolean("auto_name", true)
@@ -147,6 +152,35 @@ object History {
 
     @Synchronized
     fun findByPath(ctx: Context, path: String): Entry? = load(ctx).firstOrNull { it.path == path }
+
+    /** Добавляет записи из резервной копии (те, что уже есть, пропускает). */
+    @Synchronized
+    fun importAll(ctx: Context, entries: List<Entry>): Int {
+        val list = load(ctx)
+        var n = 0
+        for (e in entries) {
+            if (list.any { it.id == e.id || it.path == e.path }) continue
+            list.add(e)
+            n++
+        }
+        save(ctx)
+        return n
+    }
+
+    fun toJson(e: Entry): JSONObject = JSONObject().apply {
+        put("id", e.id); put("kind", e.kind.name); put("name", e.name); put("path", e.path)
+        put("created", e.created); put("fav", e.favorite); put("extra", e.extra)
+    }
+
+    fun fromJson(o: JSONObject): Entry = Entry(
+        o.getLong("id"),
+        runCatching { Kind.valueOf(o.getString("kind")) }.getOrDefault(Kind.PDF),
+        o.getString("name"),
+        o.getString("path"),
+        o.getLong("created"),
+        o.optBoolean("fav"),
+        o.optString("extra"),
+    )
 
     private fun load(ctx: Context): MutableList<Entry> {
         cache?.let { return it }

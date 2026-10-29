@@ -193,6 +193,8 @@ class MainActivity : BaseActivity() {
             Tile(R.drawable.ic_qr, R.color.tile_purple, "QR / Штрихкод", "Сканировать и создать") { startActivity(Intent(this, QrActivity::class.java)) },
             Tile(R.drawable.ic_doc, R.color.tile_teal, "Удостоверение / паспорт", "Обе стороны на A4") { startActivity(Intent(this, IdCardActivity::class.java)) },
             Tile(R.drawable.ic_edit, R.color.tile_orange, "Заполнить форму", "PDF-бланки") { tool(FormActivity::class.java) },
+            Tile(R.drawable.ic_grid, R.color.tile_blue, "Пакетная обработка", "Много фото → один PDF") { startActivity(Intent(this, BatchActivity::class.java)) },
+            Tile(R.drawable.ic_mic, R.color.tile_red, "Голос → Текст", "Диктовка в документ") { startActivity(Intent(this, VoiceActivity::class.java)) },
         )
         addTiles(col, grid, 2, big = true)
 
@@ -438,6 +440,7 @@ class MainActivity : BaseActivity() {
         col.addView(sectionTitle("РАСПОЗНАВАНИЕ ТЕКСТА"))
         col.addView(listRow(R.drawable.ic_translate, "Язык распознавания", Ocr.nameOf(prefs.ocrLang)) { chooseOcrLang() })
         col.addView(listRow(R.drawable.ic_ai, "Автоулучшение изображения", "Убирать тени и выравнивать фон перед распознаванием", switchView(prefs.autoEnhance) { prefs.autoEnhance = it }), lp().apply { topMargin = dp(8) })
+        col.addView(listRow(R.drawable.ic_scan, "Обрезка и выравнивание фото", "Находить край листа и выпрямлять строки на обычных фото", switchView(prefs.autoCrop) { prefs.autoCrop = it }), lp().apply { topMargin = dp(8) })
         col.addView(listRow(R.drawable.ic_grid, "Распознавание таблиц", "Предлагать сохранить таблицу в Excel/CSV", switchView(prefs.tables) { prefs.tables = it }), lp().apply { topMargin = dp(8) })
         col.addView(listRow(R.drawable.ic_text, "Название по тексту", "Называть сканы по первым строкам документа", switchView(prefs.autoName) { prefs.autoName = it }), lp().apply { topMargin = dp(8) })
 
@@ -452,6 +455,12 @@ class MainActivity : BaseActivity() {
         }
         col.addView(listRow(R.drawable.ic_sign, "Мои подписи и печати", "Нарисовать или загрузить") {
             startActivity(Intent(this, SignatureActivity::class.java))
+        }, lp().apply { topMargin = dp(8) })
+
+        col.addView(sectionTitle("РЕЗЕРВНАЯ КОПИЯ"))
+        col.addView(listRow(R.drawable.ic_backup, "Создать резервную копию", "Вся История одним файлом — для переноса на новый телефон") { makeBackup() })
+        col.addView(listRow(R.drawable.ic_folder, "Восстановить из копии", "Добавит документы из файла .zip") {
+            pick(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) { restoreBackup(it[0]) }
         }, lp().apply { topMargin = dp(8) })
 
         col.addView(sectionTitle("О ПРИЛОЖЕНИИ"))
@@ -472,6 +481,41 @@ class MainActivity : BaseActivity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(20), 0, dp(10))
         })
+    }
+
+    private fun makeBackup() {
+        lifecycleScope.launch {
+            showProgress("Создаю резервную копию…")
+            try {
+                val out = File(cacheDir, "MayskScan-копия-${Files.stamp()}.zip")
+                val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    Backup.create(this@MainActivity, out) { i, n -> runOnUiThread { showProgress("Резервная копия: файл $i из $n…") } }
+                }
+                hideProgress()
+                TrDialog(this@MainActivity).setTitle("Резервная копия готова")
+                    .setMessage("Документов: ${r.entries}, размер ${formatSize(r.bytes)}.\n\nСохраните файл на телефон или отправьте себе (Telegram, почта, облако). На новом телефоне: Настройки → «Восстановить из копии».")
+                    .setPositiveButton("Отправить…") { _, _ -> share(listOf(out), "application/zip") }
+                    .setNeutralButton("На телефон…") { _, _ -> saveAs(out, "application/zip") }
+                    .setNegativeButton("Закрыть", null).show()
+            } catch (e: Throwable) { fail(e) }
+        }
+    }
+
+    private fun restoreBackup(uri: Uri) {
+        lifecycleScope.launch {
+            showProgress("Восстанавливаю…")
+            try {
+                val n = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    Backup.restore(this@MainActivity, uri) { i -> runOnUiThread { showProgress("Восстановлено файлов: $i…") } }
+                }
+                hideProgress()
+                TextIndex.scheduleMissing(this@MainActivity)
+                TrDialog(this@MainActivity).setTitle("Готово!")
+                    .setMessage("Добавлено документов: $n. Они в Истории.")
+                    .setPositiveButton("OK", null).show()
+                render()
+            } catch (e: Throwable) { fail(e) }
+        }
     }
 
     private fun chooseOcrLang() {

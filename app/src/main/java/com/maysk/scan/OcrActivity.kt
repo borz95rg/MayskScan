@@ -152,7 +152,8 @@ class OcrActivity : BaseActivity() {
             try {
                 val files = withContext(Dispatchers.IO) {
                     uris.mapIndexed { i, u ->
-                        val bmp = ImageTools.decode(this@OcrActivity, u, 2600)
+                        val raw = ImageTools.decode(this@OcrActivity, u, 2600)
+                        val bmp = if (Prefs(this@OcrActivity).autoCrop) (try { DocDetect.autoCrop(raw) } catch (e: Throwable) { null })?.also { raw.recycle() } ?: raw else raw
                         val f = File(cacheDir, "ocr_${System.nanoTime()}_$i.jpg")
                         ImageTools.saveJpeg(bmp, f, 92)
                         bmp.recycle()
@@ -219,6 +220,7 @@ class OcrActivity : BaseActivity() {
                 val text = parts.joinToString("\n\n")
                 detected = Ocr.detect(text)
                 editor.setText(text)
+                recognizedText = text
                 resultBox.visibility = View.VISIBLE
                 status.visibility = View.GONE
                 if (text.isBlank()) {
@@ -235,6 +237,24 @@ class OcrActivity : BaseActivity() {
             }
         }
     }
+
+    /** Строки таблицы: с фото — по колонкам (как в оригинале), иначе — из текста. */
+    private fun tableRows(text: String): List<List<String>> {
+        if (images.isNotEmpty() && text == recognizedText) {
+            val all = ArrayList<List<String>>()
+            images.forEachIndexed { i, f ->
+                runOnUiThread { showProgress(if (images.size > 1) "Ищу колонки таблицы: фото ${i + 1} из ${images.size}…" else "Ищу колонки таблицы…") }
+                val bmp = ImageTools.decodeFile(f, 2600)
+                val rows = try { Ocr.table(this, bmp, lang) } finally { bmp.recycle() }
+                if (all.isNotEmpty() && rows.isNotEmpty()) all.add(emptyList())
+                all.addAll(rows)
+            }
+            if (all.any { it.size > 1 }) return all
+        }
+        return OfficeWriter.textToRows(text)
+    }
+
+    @Volatile private var recognizedText = ""
 
     private fun autoName(text: String): String =
         text.lineSequence().map { it.trim() }.firstOrNull { it.length >= 3 }?.take(40)?.let { Files.sanitize(it) } ?: "Текст ${Files.stamp()}"
@@ -403,8 +423,8 @@ class OcrActivity : BaseActivity() {
                         "rtf" -> out.writeText(OfficeWriter.rtf(text))
                         "html" -> out.writeText(OfficeWriter.html(text, title))
                         "md" -> out.writeText(OfficeWriter.markdown(text, title))
-                        "xlsx" -> out.outputStream().use { OfficeWriter.xlsx(listOf(title to OfficeWriter.textToRows(text)), it) }
-                        "csv" -> out.writeText("﻿" + OfficeWriter.csv(OfficeWriter.textToRows(text)))
+                        "xlsx" -> { val rows = tableRows(text); out.outputStream().use { OfficeWriter.xlsx(listOf(title to rows), it) } }
+                        "csv" -> out.writeText("﻿" + OfficeWriter.csv(tableRows(text)))
                     }
                     Files.exportCopy(this@OcrActivity, out)
                 }

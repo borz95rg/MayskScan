@@ -43,7 +43,7 @@
 "Выбранная папка": "Selected folder",
 "Выбрать PDF на телефоне…": "Choose a PDF on the phone…",
 "Выбрать все": "Select all",
-"Выбрать фото": "Choose photo",
+"Выбрать фото": "Choose photos",
 "Выйти": "Exit",
 "Выйти без сохранения?": "Exit without saving?",
 "Высокое качество": "High quality",
@@ -416,7 +416,49 @@
 "Фиолетовый": "Purple",
 "Цвет": "Color",
 "Язык интерфейса": "App language",
-"JPG": "JPG"
+"JPG": "JPG",
+"PDF с текстом (поиск и копирование)": "PDF with text (search and copy)",
+"Весь надиктованный текст будет удалён.": "All dictated text will be deleted.",
+"Восстанавливаю…": "Restoring…",
+"Восстановить из копии": "Restore from backup",
+"Вся История одним файлом — для переноса на новый телефон": "All History in one file — to move to a new phone",
+"Выберите сразу много фото документов — приложение обработает их все и соберёт в один файл.": "Choose many document photos at once — the app will process them all and put them into one file.",
+"Голос → Текст": "Voice → Text",
+"Диктовка в документ": "Dictation into a document",
+"Добавит документы из файла .zip": "Adds documents from a .zip file",
+"Ищу колонки таблицы…": "Finding table columns…",
+"Команды: «точка», «запятая», «вопросительный знак», «новая строка».\n\nБез интернета работает, если в телефоне скачан офлайн-язык распознавания речи (Настройки телефона → Google → Голосовой ввод → Офлайн-распознавание). Казахский офлайн поддерживается не на всех телефонах.": "Commands: «period», «comma», «question mark», «new line».\n\nWorks offline if an offline speech recognition language is downloaded on the phone (Phone settings → Google → Voice input → Offline speech recognition).",
+"Много фото → один PDF": "Many photos → one PDF",
+"На телефоне нет сервиса распознавания речи": "No speech recognition service on this phone",
+"Нажмите и говорите": "Tap and speak",
+"Найти край листа и выпрямить строки": "Find the page edge and straighten lines",
+"Находить край листа и выпрямлять строки на обычных фото": "Find the page edge and straighten lines on regular photos",
+"Не удалось включить микрофон": "Could not turn on the microphone",
+"Не удалось открыть фото": "Could not open the photos",
+"Нужен доступ к микрофону": "Microphone access is needed",
+"Нужен офлайн-язык": "Offline language needed",
+"ОБРАБОТКА": "PROCESSING",
+"Обрабатываю фото…": "Processing photos…",
+"Обрезка и выравнивание": "Crop and straighten",
+"Обрезка и выравнивание фото": "Photo crop and straighten",
+"Отправить…": "Send…",
+"Очистить текст?": "Clear the text?",
+"Пакетная обработка": "Batch processing",
+"РЕЗЕРВНАЯ КОПИЯ": "BACKUP",
+"Распознать текст всех фото": "Recognize text of all photos",
+"Резервная копия готова": "Backup is ready",
+"Слушаю… Нажмите, чтобы остановить": "Listening… Tap to stop",
+"Сначала надиктуйте текст": "Dictate some text first",
+"Собрать в один PDF": "Combine into one PDF",
+"Создать резервную копию": "Create backup",
+"Создаю резервную копию…": "Creating backup…",
+"ТЕКСТ — можно править": "TEXT — editable",
+"Фото не выбраны": "No photos selected",
+"ЧТО СДЕЛАТЬ": "WHAT TO DO",
+"Чтобы диктовать без интернета, скачайте язык: Настройки телефона → Google → Голосовой ввод → Офлайн-распознавание речи. Или включите интернет.": "To dictate offline, download the language: Phone settings → Google → Voice input → Offline speech recognition. Or turn on the internet.",
+"Это не резервная копия Maysk Scan": "This is not a Maysk Scan backup",
+"Этот язык не скачан для распознавания речи на телефоне": "This language is not downloaded for speech recognition on the phone",
+"Ищу края листа и выравниваю…": "Finding page edges and straightening…"
 },
 "p": [
 [
@@ -614,6 +656,42 @@
 [
 "^Maysk Scan — сканер документов, текст из фото, PDF и QR без интернета:\n(.+?)$",
 "Maysk Scan — document scanner, text from photos, PDF and QR, offline:\n$1"
+],
+[
+"^Восстановлено файлов: (.+?)…$",
+"Files restored: $1…"
+],
+[
+"^Добавлено документов: (.+?)\\. Они в Истории\\.$",
+"Documents added: $1. They are in History."
+],
+[
+"^Документов: (.+?), размер (.+?)\\.\n\nСохраните файл на телефон или отправьте себе \\(Telegram, почта, облако\\)\\. На новом телефоне: Настройки → «Восстановить из копии»\\.$",
+"Documents: $1, size $2.\n\nSave the file to your phone or send it to yourself (Telegram, email, cloud). On the new phone: Settings → «Restore from backup»."
+],
+[
+"^Ищу колонки таблицы: фото (.+?) из (.+?)…$",
+"Finding table columns: photo $1 of $2…"
+],
+[
+"^Обрабатываю фото (.+?) из (.+?)…$",
+"Processing photo $1 of $2…"
+],
+[
+"^Распознаю фото (.+?) из (.+?)…$",
+"Recognizing photo $1 of $2…"
+],
+[
+"^Резервная копия: файл (.+?) из (.+?)…$",
+"Backup: file $1 of $2…"
+],
+[
+"^Собираю PDF: страница (.+?) из (.+?)…$",
+"Building PDF: page $1 of $2…"
+],
+[
+"^Распознаю фото (.+?) из (.+?)…$",
+"Recognizing photo $1 of $2…"
 ]
 ]
 }

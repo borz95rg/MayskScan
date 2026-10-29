@@ -162,7 +162,14 @@ object ImageTools {
     }
 
     /** Изображение, подготовленное для распознавания текста: серое, без теней, контрастное. */
-    fun forOcr(src: Bitmap): Bitmap = enhance(scaleKeep(src, 2400), color = false)
+    fun forOcr(src: Bitmap): Bitmap {
+        val scaled = scaleKeep(src, 2400)
+        val straight = DocDetect.deskew(scaled) // ровные строки распознаются точнее
+        val out = enhance(straight, color = false)
+        if (straight !== scaled && straight !== out) straight.recycle()
+        if (scaled !== src && scaled !== out) scaled.recycle()
+        return out
+    }
 
     private fun scaleKeep(src: Bitmap, maxSide: Int): Bitmap {
         val m = max(src.width, src.height)

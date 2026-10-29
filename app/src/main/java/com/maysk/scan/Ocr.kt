@@ -102,6 +102,78 @@ object Ocr {
     }
 
     /**
+     * Таблица с фото: слова с их положением → строки и колонки (для Excel).
+     * Колонки находятся по вертикальным «просветам», где нет ни одного слова.
+     */
+    fun table(ctx: Context, bmp: Bitmap, spec: String): List<List<String>> {
+        ensureData(ctx)
+        val have = available(ctx)
+        val langs = (if (spec == "auto") "rus+eng" else spec).split('+').filter { it in have }.ifEmpty { listOf("eng") }.joinToString("+")
+        val img = ImageTools.forOcr(bmp)
+        val tess = TessBaseAPI()
+        class W(val text: String, val l: Int, val t: Int, val r: Int, val b: Int) { val cy get() = (t + b) / 2f; val cx get() = (l + r) / 2f }
+        val words = ArrayList<W>()
+        try {
+            if (!tess.init(dataDir(ctx).absolutePath, langs)) throw IllegalStateException("Не удалось загрузить язык распознавания")
+            tess.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
+            tess.setImage(img)
+            tess.getUTF8Text()
+            val it = tess.resultIterator
+            if (it != null) {
+                it.begin()
+                do {
+                    val w = it.getUTF8Text(TessBaseAPI.PageIteratorLevel.RIL_WORD)
+                    val rc = it.getBoundingRect(TessBaseAPI.PageIteratorLevel.RIL_WORD)
+                    if (!w.isNullOrBlank() && rc != null) words.add(W(w.trim(), rc.left, rc.top, rc.right, rc.bottom))
+                } while (it.next(TessBaseAPI.PageIteratorLevel.RIL_WORD))
+                it.delete()
+            }
+        } finally {
+            tess.recycle()
+            if (img !== bmp) img.recycle()
+        }
+        if (words.isEmpty()) return emptyList()
+        val hMed = words.map { it.b - it.t }.sorted()[words.size / 2].coerceAtLeast(6)
+
+        // Строки: слова с близким центром по вертикали
+        val rows = ArrayList<MutableList<W>>()
+        for (w in words.sortedBy { it.cy }) {
+            val last = rows.lastOrNull()
+            if (last != null && kotlin.math.abs(w.cy - last.map { it.cy }.average().toFloat()) < hMed * 0.6f) last.add(w) else rows.add(mutableListOf(w))
+        }
+
+        // Колонки: просветы по горизонтали, где нет слов (длинные заголовки не учитываем)
+        val minX = words.minOf { it.l }
+        val maxX = words.maxOf { it.r }
+        val width = maxX - minX
+        val cover = IntArray(width + 1)
+        for (w in words) {
+            if (w.r - w.l > width * 0.4f) continue
+            for (x in (w.l - minX)..(w.r - minX)) cover[x]++
+        }
+        val gapMin = maxOf(hMed, 10)
+        val seps = ArrayList<Int>()
+        var x = 0
+        while (x <= width) {
+            if (cover[x] == 0) {
+                val start = x
+                while (x <= width && cover[x] == 0) x++
+                if (x - start >= gapMin && start > 0 && x <= width) seps.add(minX + (start + x) / 2)
+            } else x++
+        }
+        val cols = seps.size + 1
+        return rows.map { row ->
+            val cells = Array(cols) { StringBuilder() }
+            for (w in row.sortedBy { it.l }) {
+                val c = seps.count { it < w.cx }
+                if (cells[c].isNotEmpty()) cells[c].append(' ')
+                cells[c].append(w.text)
+            }
+            cells.map { it.toString() }
+        }
+    }
+
+    /**
      * Короткое название документа по его тексту: первые осмысленные строки верхней части страницы.
      * Например «Исх. № 395 — Майская районная больница».
      */

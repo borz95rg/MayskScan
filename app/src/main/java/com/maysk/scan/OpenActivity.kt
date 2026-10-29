@@ -65,11 +65,13 @@ class OpenActivity : BaseActivity() {
                 choose("Что сделать с ${if (paths.size == 1) "фото" else "${paths.size} фото"}?", listOf(
                     "Распознать текст",
                     "Сделать PDF (как скан)",
+                    "Пакетная обработка",
                     "Сканировать QR / штрихкод",
                 )) { which ->
                     when (which) {
                         0 -> go(Intent(this, OcrActivity::class.java).putExtra("images", paths))
                         1 -> go(Intent(this, ScanActivity::class.java).putExtra("images", paths))
+                        2 -> go(Intent(this, BatchActivity::class.java).putExtra("images", paths))
                         else -> go(Intent(this, QrActivity::class.java).putExtra("image", paths[0]))
                     }
                 }

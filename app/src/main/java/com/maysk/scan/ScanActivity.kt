@@ -112,7 +112,7 @@ class ScanActivity : BaseActivity() {
                 titleView.text = "Изображение"
                 refresh()
             }
-            givenUris != null -> addUris(givenUris, if (Prefs(this).autoEnhance) Filter.ENHANCE else Filter.ORIGINAL)
+            givenUris != null -> addUris(givenUris, if (Prefs(this).autoEnhance) Filter.ENHANCE else Filter.ORIGINAL, crop = true)
             savedInstanceState == null -> startScanner()
         }
     }
@@ -151,14 +151,17 @@ class ScanActivity : BaseActivity() {
         }
     }
 
-    private fun addUris(uris: List<Uri>, filter: Filter) {
+    private fun addUris(uris: List<Uri>, filter: Filter, crop: Boolean = filter != Filter.ORIGINAL) {
         if (uris.isEmpty()) { if (pages.isEmpty()) finish(); return }
+        val doCrop = crop && Prefs(this).autoCrop
         lifecycleScope.launch {
-            showProgress("Обработка…")
+            showProgress(if (doCrop) "Ищу края листа и выравниваю…" else "Обработка…")
             try {
                 val added = withContext(Dispatchers.IO) {
                     uris.mapIndexed { i, u ->
-                        val bmp = ImageTools.decode(this@ScanActivity, u, 2600)
+                        val raw = ImageTools.decode(this@ScanActivity, u, 2600)
+                        // Фото не со сканера: вырезаем лист и выравниваем строки
+                        val bmp = if (doCrop) DocDetect.straighten(raw).also { if (it !== raw) raw.recycle() } else raw
                         val f = File(cacheDir, "scan_${System.nanoTime()}_$i.jpg")
                         ImageTools.saveJpeg(bmp, f, 92)
                         bmp.recycle()
