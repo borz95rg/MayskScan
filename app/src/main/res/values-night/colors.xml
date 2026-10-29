@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Тёмная тема (по умолчанию) — тёмно-синий дизайн Maysk Scan -->
+<resources>
+    <color name="bg">#FF07101D</color>
+    <color name="bg2">#FF0B1728</color>
+    <color name="card">#FF0F2038</color>
+    <color name="card2">#FF132946</color>
+    <color name="stroke">#FF1C3C66</color>
+    <color name="glow">#FF2F7BDB</color>
+    <color name="text">#FFFFFFFF</color>
+    <color name="text2">#FF8EA4C2</color>
+    <color name="accent">#FF1E88FF</color>
+    <color name="accent2">#FF0F6BDB</color>
+    <color name="danger">#FFFF5A5F</color>
+    <color name="success">#FF2ECC71</color>
+    <color name="gold">#FFFFC24B</color>
+    <color name="tile_blue">#FF1E88FF</color>
+    <color name="tile_green">#FF22B366</color>
+    <color name="tile_red">#FFE5484D</color>
+    <color name="tile_purple">#FF8B5CF6</color>
+    <color name="tile_orange">#FFF59E0B</color>
+    <color name="tile_teal">#FF14B8A6</color>
+    <color name="white_fixed">#FFFFFFFF</color>
+    <color name="black_fixed">#FF000000</color>
+</resources>

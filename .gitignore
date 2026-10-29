@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.DS_Store
+*.keystore
+*.jks
+keystore-base64.txt
+# Языки распознавания скачиваются при сборке
+app/src/main/assets/tessdata/

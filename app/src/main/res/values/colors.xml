@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Светлая тема (если в настройках выключить тёмную) -->
+<resources>
+    <color name="bg">#FFF2F6FC</color>
+    <color name="bg2">#FFE7EEF8</color>
+    <color name="card">#FFFFFFFF</color>
+    <color name="card2">#FFF0F5FC</color>
+    <color name="stroke">#FFC6D8F0</color>
+    <color name="glow">#FF7FB6F5</color>
+    <color name="text">#FF0B1A2E</color>
+    <color name="text2">#FF5B6B82</color>
+    <color name="accent">#FF1E88FF</color>
+    <color name="accent2">#FF0F6BDB</color>
+    <color name="danger">#FFE5484D</color>
+    <color name="success">#FF22B366</color>
+    <color name="gold">#FFF5A623</color>
+    <color name="tile_blue">#FF1E88FF</color>
+    <color name="tile_green">#FF22B366</color>
+    <color name="tile_red">#FFE5484D</color>
+    <color name="tile_purple">#FF8B5CF6</color>
+    <color name="tile_orange">#FFF59E0B</color>
+    <color name="tile_teal">#FF14B8A6</color>
+    <color name="white_fixed">#FFFFFFFF</color>
+    <color name="black_fixed">#FF000000</color>
+</resources>
