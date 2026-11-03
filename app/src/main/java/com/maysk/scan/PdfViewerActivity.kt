@@ -2,6 +2,8 @@ package com.maysk.scan
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.view.ScaleGestureDetector
+import android.widget.SeekBar
 import android.os.Bundle
 import android.text.InputType
 import android.util.LruCache
@@ -33,6 +35,9 @@ class PdfViewerActivity : BaseActivity() {
     private lateinit var indicator: TextView
     private val cache = object : LruCache<Int, Bitmap>(6) {}
     private var night = false
+    private var zoom = 1.0f
+    private lateinit var zoomLabel: TextView
+    private lateinit var zoomSlider: SeekBar
     private var texts: List<String>? = null
     private lateinit var prefs: Prefs
     private val key get() = file.name + "_" + file.length()
@@ -69,10 +74,45 @@ class PdfViewerActivity : BaseActivity() {
         pager.addView(iconButton(R.drawable.ic_chevron) { jump(lm.findFirstVisibleItemPosition() + 1) })
         body.addView(pager)
 
-        list = RecyclerView(this).apply { setBackgroundColor(col(R.color.bg2)) }
+        list = RecyclerView(this).apply {
+            setBackgroundColor(col(R.color.bg2))
+            clipChildren = false
+            clipToPadding = false
+        }
         lm = LinearLayoutManager(this)
         list.layoutManager = lm
         body.addView(list, lp(MATCH, 0, 1f))
+
+        // Масштаб: жест двумя пальцами, ползунок и быстрые режимы просмотра.
+        val zoomPanel = vbox(4).apply {
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = rounded(col(R.color.card), 12, col(R.color.stroke))
+        }
+        val zoomTop = hbox(8).apply { gravity = Gravity.CENTER_VERTICAL }
+        zoomTop.addView(text("Масштаб", 12f, R.color.text2))
+        zoomLabel = text("100%", 12f, bold = true)
+        zoomTop.addView(zoomLabel)
+        zoomTop.addView(View(this), lp(0, 1, 1f))
+        zoomTop.addView(actionButton(R.drawable.ic_undo, "−") { setZoom(zoom - 0.1f) }, lp(WRAP, WRAP))
+        zoomTop.addView(actionButton(R.drawable.ic_add, "+") { setZoom(zoom + 0.1f) }, lp(WRAP, WRAP))
+        zoomPanel.addView(zoomTop)
+        zoomSlider = SeekBar(this).apply {
+            max = 275
+            progress = 25 // 100% (диапазон 75–350%)
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) setZoom(0.75f + progress / 100f, updateSlider = false)
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+        zoomPanel.addView(zoomSlider, lp(MATCH, WRAP))
+        val modes = hbox(8)
+        modes.addView(actionButton(R.drawable.ic_pdf, "По ширине") { setZoom(1f) }, lp(0, WRAP, 1f))
+        modes.addView(actionButton(R.drawable.ic_doc, "Вся страница") { setZoom(0.85f) }, lp(0, WRAP, 1f))
+        zoomPanel.addView(modes)
+        body.addView(zoomPanel)
 
         val bottom = hbox(8)
         bottom.addView(actionButton(R.drawable.ic_search, "Поиск") { search() }, lp(0, WRAP, 1f))
@@ -102,6 +142,18 @@ class PdfViewerActivity : BaseActivity() {
         render?.close()
         cache.evictAll()
         super.onDestroy()
+    }
+
+    private fun setZoom(value: Float, updateSlider: Boolean = true) {
+        zoom = value.coerceIn(0.75f, 3.5f)
+        zoomLabel.text = "${(zoom * 100).toInt()}%"
+        if (updateSlider && ::zoomSlider.isInitialized) zoomSlider.progress = ((zoom - 0.75f) * 100).toInt().coerceIn(0, 275)
+        if (::list.isInitialized) {
+            for (i in 0 until list.childCount) {
+                val frame = list.getChildAt(i) as? FrameLayout ?: continue
+                frame.getChildAt(0)?.let { page -> page.scaleX = zoom; page.scaleY = zoom }
+            }
+        }
     }
 
     private fun openRenderer() {
@@ -168,9 +220,20 @@ class PdfViewerActivity : BaseActivity() {
                 layoutParams = RecyclerView.LayoutParams(MATCH, WRAP).apply { setMargins(dp(10), dp(6), dp(10), dp(6)) }
                 setBackgroundColor(if (night) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt())
                 elevation = dpf(2f)
+                clipChildren = false
             }
             val iv = ImageView(parent.context).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
             frame.addView(iv, FrameLayout.LayoutParams(MATCH, WRAP))
+            val detector = ScaleGestureDetector(parent.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    setZoom(zoom * detector.scaleFactor)
+                    return true
+                }
+            })
+            frame.setOnTouchListener { _, event ->
+                detector.onTouchEvent(event)
+                event.pointerCount > 1 || detector.isInProgress
+            }
             return object : RecyclerView.ViewHolder(frame) {}
         }
 
@@ -178,6 +241,8 @@ class PdfViewerActivity : BaseActivity() {
             val frame = holder.itemView as FrameLayout
             val iv = frame.getChildAt(0) as ImageView
             iv.tag = position
+            iv.scaleX = zoom
+            iv.scaleY = zoom
             val r = render ?: return
             val width = list.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
             val (pw, ph) = try { r.pageSize(position) } catch (e: Exception) { 1 to 1 }
