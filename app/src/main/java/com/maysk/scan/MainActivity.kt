@@ -195,6 +195,7 @@ class MainActivity : BaseActivity() {
             Tile(R.drawable.ic_edit, R.color.tile_orange, "Заполнить форму", "PDF-бланки") { tool(FormActivity::class.java) },
             Tile(R.drawable.ic_grid, R.color.tile_blue, "Пакетная обработка", "Много фото → один PDF") { startActivity(Intent(this, BatchActivity::class.java)) },
             Tile(R.drawable.ic_mic, R.color.tile_red, "Голос → Текст", "Диктовка в документ") { startActivity(Intent(this, VoiceActivity::class.java)) },
+            Tile(R.drawable.ic_doc, R.color.tile_teal, "Документы", "Word, Excel, PowerPoint и текст") { startActivity(Intent(this, OfficeWorkspaceActivity::class.java)) },
         )
         addTiles(col, grid, 2, big = true)
 

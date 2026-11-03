@@ -12,11 +12,13 @@ import java.io.File
 
 /** Принимает файлы из других приложений: «Открыть с помощью» и «Поделиться». */
 class OpenActivity : BaseActivity() {
+    private var originalUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         screen("Maysk Scan", back = true)
         val uris = incoming()
+        originalUri = uris.firstOrNull()
         if (uris.isEmpty()) { toast("Файл не получен"); finish(); return }
         lifecycleScope.launch {
             showProgress("Открываю…")
@@ -53,12 +55,19 @@ class OpenActivity : BaseActivity() {
 
     private fun route(files: List<File>) {
         val pdfs = files.filter { isPdf(it) }
-        val images = files - pdfs.toSet()
+        val images = files.filter { it.extension.lowercase() in listOf("jpg", "jpeg", "png", "webp", "bmp") }
+        val office = files - pdfs.toSet() - images.toSet()
         when {
-            pdfs.size == 1 && images.isEmpty() -> go(Intent(this, PdfViewerActivity::class.java).putExtra(EXTRA_FILE, pdfs[0].absolutePath))
-            pdfs.size > 1 && images.isEmpty() -> {
+            pdfs.size == 1 && images.isEmpty() && office.isEmpty() -> go(Intent(this, PdfViewerActivity::class.java).putExtra(EXTRA_FILE, pdfs[0].absolutePath))
+            pdfs.size > 1 && images.isEmpty() && office.isEmpty() -> {
                 toast("Открываю первый файл. Для объединения — инструмент «Объединить»")
                 go(Intent(this, PdfViewerActivity::class.java).putExtra(EXTRA_FILE, pdfs[0].absolutePath))
+            }
+            office.isNotEmpty() -> {
+                if (office.size > 1 || pdfs.isNotEmpty() || images.isNotEmpty()) toast("Открываю первый офисный документ")
+                go(Intent(this, OfficeWorkspaceActivity::class.java)
+                    .putExtra(EXTRA_FILE, office[0].absolutePath)
+                    .putExtra("source_uri", originalUri?.toString()))
             }
             images.isNotEmpty() -> {
                 val paths = images.map { it.absolutePath }.toTypedArray()

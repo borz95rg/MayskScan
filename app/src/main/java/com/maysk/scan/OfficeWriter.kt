@@ -297,6 +297,52 @@ object OfficeWriter {
         "<a:bgFillStyleLst><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill>" +
         "<a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>"
 
+    /** Текстовые слайды → редактируемый .pptx. Изображения и исходный дизайн не переносятся. */
+    fun pptxText(slides: List<String>, out: OutputStream) {
+        val list = slides.ifEmpty { listOf("") }
+        val cx = 12192000L
+        val cy = 6858000L
+        ZipOutputStream(out).use { z ->
+            val overrides = StringBuilder()
+            list.indices.forEach { i ->
+                overrides.append("<Override PartName=\"/ppt/slides/slide${i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>")
+            }
+            z.put("[Content_Types].xml", XML +
+                "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+                "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+                "<Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>" +
+                "<Override PartName=\"/ppt/slideMasters/slideMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>" +
+                "<Override PartName=\"/ppt/slideLayouts/slideLayout1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>" +
+                "<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>" + overrides + "</Types>")
+            z.put("_rels/.rels", XML + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"ppt/presentation.xml\"/></Relationships>")
+            val ids = StringBuilder()
+            val rels = StringBuilder("<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"theme/theme1.xml\"/>")
+            list.indices.forEach { i ->
+                ids.append("<p:sldId id=\"${256 + i}\" r:id=\"rId${i + 3}\"/>")
+                rels.append("<Relationship Id=\"rId${i + 3}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide${i + 1}.xml\"/>")
+            }
+            val ns = "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\""
+            z.put("ppt/presentation.xml", XML + "<p:presentation $ns><p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rId1\"/></p:sldMasterIdLst><p:sldIdLst>$ids</p:sldIdLst><p:sldSz cx=\"$cx\" cy=\"$cy\"/><p:notesSz cx=\"6858000\" cy=\"9144000\"/></p:presentation>")
+            z.put("ppt/_rels/presentation.xml.rels", XML + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">$rels</Relationships>")
+            val emptyTree = "<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld>"
+            z.put("ppt/slideMasters/slideMaster1.xml", XML + "<p:sldMaster $ns>$emptyTree<p:clrMap bg1=\"lt1\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent1\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/><p:sldLayoutIdLst><p:sldLayoutId id=\"2147483649\" r:id=\"rId1\"/></p:sldLayoutIdLst></p:sldMaster>")
+            z.put("ppt/slideMasters/_rels/slideMaster1.xml.rels", XML + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"../theme/theme1.xml\"/></Relationships>")
+            z.put("ppt/slideLayouts/slideLayout1.xml", XML + "<p:sldLayout $ns type=\"blank\" preserve=\"1\">$emptyTree<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>")
+            z.put("ppt/slideLayouts/_rels/slideLayout1.xml.rels", XML + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"../slideMasters/slideMaster1.xml\"/></Relationships>")
+            z.put("ppt/theme/theme1.xml", THEME)
+            list.forEachIndexed { i, slide ->
+                val paragraphs = slide.split('\n').joinToString("") { line ->
+                    "<a:p><a:r><a:rPr lang=\"ru-RU\" sz=\"2200\"/><a:t xml:space=\"preserve\">${esc(line)}</a:t></a:r><a:endParaRPr lang=\"ru-RU\"/></a:p>"
+                }
+                val shape = "<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Текст слайда\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"914400\" y=\"685800\"/><a:ext cx=\"10363200\" cy=\"5486400\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap=\"square\"/><a:lstStyle/>$paragraphs</p:txBody></p:sp>"
+                val tree = emptyTree.replace("</p:spTree>", "$shape</p:spTree>")
+                z.put("ppt/slides/slide${i + 1}.xml", XML + "<p:sld $ns>${tree}<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>")
+                z.put("ppt/slides/_rels/slide${i + 1}.xml.rels", XML + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/></Relationships>")
+            }
+        }
+    }
+
     // ---------- Текстовые форматы ----------
 
     fun rtf(text: String): String {
