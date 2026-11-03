@@ -2,42 +2,43 @@ package com.maysk.scan
 
 import android.content.Intent
 import android.graphics.Bitmap
-import android.view.ScaleGestureDetector
-import android.widget.SeekBar
 import android.os.Bundle
 import android.text.InputType
 import android.util.LruCache
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.roundToInt
 
-/** Просмотр PDF: страницы, поиск, закладки, миниатюры, ночной режим, все инструменты. */
+/**
+ * Просмотр PDF: страница целиком на экране, сверху — стрелки и все функции,
+ * масштаб — жестом двумя пальцами, кнопками «+ / −», ползунком и режимами «По ширине» / «Вся страница».
+ */
 class PdfViewerActivity : BaseActivity() {
 
     private lateinit var file: File
     private var viewFile: File? = null   // расшифрованная копия, если PDF с паролем
     private var password: String? = null
     private var render: PdfRender? = null
-    private lateinit var list: RecyclerView
-    private lateinit var lm: LinearLayoutManager
+    private lateinit var pdfView: PdfZoomView
     private lateinit var indicator: TextView
-    private val cache = object : LruCache<Int, Bitmap>(6) {}
-    private var night = false
-    private var zoom = 1.0f
-    private lateinit var zoomLabel: TextView
+    private lateinit var zoomChip: TextView
+    private lateinit var zoomPanel: View
     private lateinit var zoomSlider: SeekBar
+    private lateinit var fitWidthChip: TextView
+    private lateinit var fitPageChip: TextView
+    private var night = false
     private var texts: List<String>? = null
     private lateinit var prefs: Prefs
     private val key get() = file.name + "_" + file.length()
@@ -59,71 +60,87 @@ class PdfViewerActivity : BaseActivity() {
 
         val body = screen(file.name, scroll = false)
         body.setPadding(0, 0, 0, 0)
+        // Верхняя строка плотнее: чем меньше панелей, тем больше места документу
+        topBar.setPadding(dp(8), dp(2), dp(8), dp(2))
         addTopAction(R.drawable.ic_share) { share(listOf(file), "application/pdf") }
         addTopAction(R.drawable.ic_more) { more() }
 
-        // Переключатель страниц «‹ 1 / 12 ›»
-        val pager = hbox().apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(6)) }
-        pager.addView(iconButton(R.drawable.ic_back) { jump(lm.findFirstVisibleItemPosition() - 1) })
+        // Панель функций: стрелки страниц «‹ 1 / 12 ›», поиск, закладки, миниатюры, масштаб
+        val toolbar = hbox().apply { setPadding(dp(8), 0, dp(8), dp(4)) }
+        toolbar.addView(iconButton(R.drawable.ic_chevron_left) { step(-1) }, lp(dp(40), dp(40)))
         indicator = text("", 14f, bold = true).apply {
+            gravity = Gravity.CENTER
             background = rounded(col(R.color.card), 14, col(R.color.stroke))
-            setPadding(dp(16), dp(6), dp(16), dp(6))
+            setPadding(dp(12), dp(6), dp(12), dp(6))
             setOnClickListener { goTo() }
         }
-        pager.addView(indicator)
-        pager.addView(iconButton(R.drawable.ic_chevron) { jump(lm.findFirstVisibleItemPosition() + 1) })
-        body.addView(pager)
-
-        list = RecyclerView(this).apply {
-            setBackgroundColor(col(R.color.bg2))
-            clipChildren = false
-            clipToPadding = false
+        toolbar.addView(indicator, lp(WRAP, WRAP).apply { setMargins(dp(2), 0, dp(2), 0) })
+        toolbar.addView(iconButton(R.drawable.ic_chevron) { step(1) }, lp(dp(40), dp(40)))
+        toolbar.addView(View(this), lp(0, 1, 0.3f))
+        toolbar.addView(iconButton(R.drawable.ic_search) { search() }, lp(0, dp(40), 1f))
+        toolbar.addView(iconButton(R.drawable.ic_bookmark) { bookmarks() }, lp(0, dp(40), 1f))
+        toolbar.addView(iconButton(R.drawable.ic_grid) { thumbnails() }, lp(0, dp(40), 1f))
+        zoomChip = text("100%", 12.5f, bold = true).apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+            background = clickable(rounded(col(R.color.card), 14, col(R.color.stroke)), 14)
+            setPadding(dp(4), dp(7), dp(4), dp(7))
+            setOnClickListener { zoomPanel.visibility = if (zoomPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE }
         }
-        lm = LinearLayoutManager(this)
-        list.layoutManager = lm
-        body.addView(list, lp(MATCH, 0, 1f))
+        toolbar.addView(zoomChip, lp(0, WRAP, 1.2f))
+        body.addView(toolbar, lp())
 
-        // Масштаб: жест двумя пальцами, ползунок и быстрые режимы просмотра.
-        val zoomPanel = vbox(4).apply {
-            setPadding(dp(10), dp(5), dp(10), dp(5))
+        // Панель масштаба (открывается по нажатию на проценты): «−», ползунок, «+», быстрые режимы
+        zoomPanel = vbox(0).apply {
+            visibility = View.GONE
+            setPadding(dp(10), dp(4), dp(10), dp(8))
             background = rounded(col(R.color.card), 12, col(R.color.stroke))
-        }
-        val zoomTop = hbox(8).apply { gravity = Gravity.CENTER_VERTICAL }
-        zoomTop.addView(text("Масштаб", 12f, R.color.text2))
-        zoomLabel = text("100%", 12f, bold = true)
-        zoomTop.addView(zoomLabel)
-        zoomTop.addView(View(this), lp(0, 1, 1f))
-        zoomTop.addView(actionButton(R.drawable.ic_undo, "−") { setZoom(zoom - 0.1f) }, lp(WRAP, WRAP))
-        zoomTop.addView(actionButton(R.drawable.ic_add, "+") { setZoom(zoom + 0.1f) }, lp(WRAP, WRAP))
-        zoomPanel.addView(zoomTop)
-        zoomSlider = SeekBar(this).apply {
-            max = 275
-            progress = 25 // 100% (диапазон 75–350%)
-            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser) setZoom(0.75f + progress / 100f, updateSlider = false)
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-            })
-        }
-        zoomPanel.addView(zoomSlider, lp(MATCH, WRAP))
-        val modes = hbox(8)
-        modes.addView(actionButton(R.drawable.ic_pdf, "По ширине") { setZoom(1f) }, lp(0, WRAP, 1f))
-        modes.addView(actionButton(R.drawable.ic_doc, "Вся страница") { setZoom(0.85f) }, lp(0, WRAP, 1f))
-        zoomPanel.addView(modes)
-        body.addView(zoomPanel)
+        }.also { panel ->
+            val row = hbox(0)
+            row.addView(iconButton(R.drawable.ic_minus) { pdfView.setZoomLevel(pdfView.zoom / 1.2f) }, lp(dp(40), dp(40)))
+            zoomSlider = SeekBar(this).apply {
+                max = SLIDER_MAX
+                progress = sliderFor(1f)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        if (fromUser) pdfView.setZoomLevel(PdfZoomView.MIN_ZOOM + progress / 100f)
+                    }
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                })
+            }
+            row.addView(zoomSlider, lp(0, WRAP, 1f))
+            row.addView(iconButton(R.drawable.ic_add) { pdfView.setZoomLevel(pdfView.zoom * 1.2f) }, lp(dp(40), dp(40)))
+            panel.addView(row)
 
-        val bottom = hbox(8)
-        bottom.addView(actionButton(R.drawable.ic_search, "Поиск") { search() }, lp(0, WRAP, 1f))
-        bottom.addView(actionButton(R.drawable.ic_bookmark, "Закладки") { bookmarks() }, lp(0, WRAP, 1f).apply { leftMargin = dp(6) })
-        bottom.addView(actionButton(R.drawable.ic_grid, "Миниатюры") { thumbnails() }, lp(0, WRAP, 1f).apply { leftMargin = dp(6) })
-        bottom.addView(actionButton(R.drawable.ic_more, "Ещё") { more() }, lp(0, WRAP, 1f).apply { leftMargin = dp(6) })
-        body.addView(bottom)
+            val modes = hbox(0)
+            fitWidthChip = text("По ширине", 13.5f).apply {
+                gravity = Gravity.CENTER
+                setOnClickListener { pdfView.fitWidth() }
+            }
+            fitPageChip = text("Вся страница", 13.5f).apply {
+                gravity = Gravity.CENTER
+                setOnClickListener { pdfView.fitPage() }
+            }
+            modes.addView(fitWidthChip, lp(0, WRAP, 1f))
+            modes.addView(fitPageChip, lp(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            panel.addView(modes, lp().apply { topMargin = dp(2) })
+        }
+        styleMode(PdfZoomView.Mode.FIT_PAGE)
+        body.addView(zoomPanel, lp().apply { setMargins(dp(8), 0, dp(8), dp(4)) })
 
-        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) = updateIndicator()
-        })
+        // Документ — всё оставшееся место
+        pdfView = PdfZoomView(this).apply {
+            setBackgroundColor(col(R.color.bg2))
+            setNight(night)
+            onZoomChanged = { z ->
+                zoomChip.text = "${(z * 100).roundToInt()}%"
+                zoomSlider.progress = sliderFor(z)
+            }
+            onPageChanged = { p -> indicator.text = "${p + 1} / $pageCount" }
+            onModeChanged = { m -> styleMode(m) }
+        }
+        body.addView(pdfView, lp(MATCH, 0, 1f))
         openRenderer()
     }
 
@@ -135,40 +152,41 @@ class PdfViewerActivity : BaseActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (::lm.isInitialized) prefs.setLastPage(key, lm.findFirstVisibleItemPosition().coerceAtLeast(0))
+        if (::pdfView.isInitialized) prefs.setLastPage(key, pdfView.currentPage)
     }
 
     override fun onDestroy() {
+        if (::pdfView.isInitialized) pdfView.release()   // сначала остановить отрисовку, потом закрывать файл
         render?.close()
-        cache.evictAll()
         super.onDestroy()
     }
 
-    private fun setZoom(value: Float, updateSlider: Boolean = true) {
-        zoom = value.coerceIn(0.75f, 3.5f)
-        zoomLabel.text = "${(zoom * 100).toInt()}%"
-        if (updateSlider && ::zoomSlider.isInitialized) zoomSlider.progress = ((zoom - 0.75f) * 100).toInt().coerceIn(0, 275)
-        if (::list.isInitialized) {
-            for (i in 0 until list.childCount) {
-                val frame = list.getChildAt(i) as? FrameLayout ?: continue
-                frame.getChildAt(0)?.let { page -> page.scaleX = zoom; page.scaleY = zoom }
-            }
+    /** Подсветка активного режима: «По ширине» / «Вся страница». В свободном масштабе обе кнопки обычные. */
+    private fun styleMode(m: PdfZoomView.Mode) {
+        fun style(chip: TextView, selected: Boolean) {
+            chip.background = clickable(if (selected) accentBg(16) else rounded(col(R.color.card2), 16, col(R.color.stroke)), 16)
+            chip.setTextColor(col(if (selected) R.color.white_fixed else R.color.text))
+            chip.setPadding(dp(8), dp(9), dp(8), dp(9))
         }
+        style(fitWidthChip, m == PdfZoomView.Mode.FIT_WIDTH)
+        style(fitPageChip, m == PdfZoomView.Mode.FIT_PAGE)
     }
+
+    private fun sliderFor(z: Float): Int = ((z - PdfZoomView.MIN_ZOOM) * 100f).roundToInt().coerceIn(0, SLIDER_MAX)
 
     private fun openRenderer() {
         val r = try { PdfRender.tryOpen(viewFile ?: file) } catch (e: Exception) { fail(e); return }
         if (r == null) { askPassword(); return }
         render = r
-        list.adapter = PageAdapter()
         val last = prefs.lastPage(key)
-        if (last > 0 && last < r.pageCount) lm.scrollToPositionWithOffset(last, 0)
-        updateIndicator()
+        indicator.text = "${(last + 1).coerceIn(1, r.pageCount)} / ${r.pageCount}"
+        // Документ открывается страницей целиком, с места, где закончили чтение
+        pdfView.open(r, lifecycleScope, if (last in 0 until r.pageCount) last else 0)
     }
 
     private fun reload() {
+        pdfView.release()
         render?.close()
-        cache.evictAll()
         texts = null
         openRenderer()
     }
@@ -193,70 +211,18 @@ class PdfViewerActivity : BaseActivity() {
     /** Файл для инструментов: без пароля (если открывали с паролем). */
     private fun workFile(): File = viewFile ?: file
 
-    private fun updateIndicator() {
-        val r = render ?: return
-        val p = (lm.findFirstVisibleItemPosition().takeIf { it >= 0 } ?: 0) + 1
-        indicator.text = "$p / ${r.pageCount}"
+    private fun step(delta: Int) {
+        pdfView.goToPage(pdfView.currentPage + delta)
     }
 
     private fun jump(index: Int) {
-        val r = render ?: return
-        lm.scrollToPositionWithOffset(index.coerceIn(0, r.pageCount - 1), 0)
-        list.post { updateIndicator() }
+        pdfView.goToPage(index)
     }
 
     private fun goTo() {
         val r = render ?: return
         ask("Перейти к странице", "1 – ${r.pageCount}", "", InputType.TYPE_CLASS_NUMBER) { s ->
             s.toIntOrNull()?.let { jump(it - 1) }
-        }
-    }
-
-    private inner class PageAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-        override fun getItemCount() = render?.pageCount ?: 0
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-            val frame = FrameLayout(parent.context).apply {
-                layoutParams = RecyclerView.LayoutParams(MATCH, WRAP).apply { setMargins(dp(10), dp(6), dp(10), dp(6)) }
-                setBackgroundColor(if (night) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt())
-                elevation = dpf(2f)
-                clipChildren = false
-            }
-            val iv = ImageView(parent.context).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
-            frame.addView(iv, FrameLayout.LayoutParams(MATCH, WRAP))
-            val detector = ScaleGestureDetector(parent.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    setZoom(zoom * detector.scaleFactor)
-                    return true
-                }
-            })
-            frame.setOnTouchListener { _, event ->
-                detector.onTouchEvent(event)
-                event.pointerCount > 1 || detector.isInProgress
-            }
-            return object : RecyclerView.ViewHolder(frame) {}
-        }
-
-        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            val frame = holder.itemView as FrameLayout
-            val iv = frame.getChildAt(0) as ImageView
-            iv.tag = position
-            iv.scaleX = zoom
-            iv.scaleY = zoom
-            val r = render ?: return
-            val width = list.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-            val (pw, ph) = try { r.pageSize(position) } catch (e: Exception) { 1 to 1 }
-            iv.minimumHeight = (width * ph / pw.toFloat()).toInt()
-            val cached = cache.get(position)
-            if (cached != null) { iv.setImageBitmap(cached); return }
-            iv.setImageBitmap(null)
-            lifecycleScope.launch {
-                val bmp = withContext(Dispatchers.IO) {
-                    try { r.render(position, (width * 1.3f).toInt().coerceAtMost(2000), night) } catch (e: Throwable) { null }
-                } ?: return@launch
-                cache.put(position, bmp)
-                if (iv.tag == position) iv.setImageBitmap(bmp)
-            }
         }
     }
 
@@ -292,7 +258,7 @@ class PdfViewerActivity : BaseActivity() {
     // ---------- Закладки ----------
 
     private fun bookmarks() {
-        val cur = lm.findFirstVisibleItemPosition().coerceAtLeast(0)
+        val cur = pdfView.currentPage
         val set = prefs.bookmarks(key).toMutableSet()
         val items = ArrayList<String>()
         items.add(if (cur in set) "★ Убрать закладку со страницы ${cur + 1}" else "☆ Добавить закладку на страницу ${cur + 1}")
@@ -368,7 +334,7 @@ class PdfViewerActivity : BaseActivity() {
             val f = workFile()
             when (i) {
                 0 -> goTo()
-                1 -> { night = !night; prefs.nightPdf = night; cache.evictAll(); list.adapter = PageAdapter(); jump(lm.findFirstVisibleItemPosition()) }
+                1 -> { night = !night; prefs.nightPdf = night; pdfView.setNight(night) }
                 2 -> openTool(PdfPagesActivity::class.java, f)
                 3 -> openTool(PdfAnnotateActivity::class.java, f, "sign")
                 4 -> openTool(PdfAnnotateActivity::class.java, f, "draw")
@@ -414,7 +380,7 @@ class PdfViewerActivity : BaseActivity() {
             }
         }
         if (count <= 10) { doIt((0 until count).toList()); return }
-        val cur = lm.findFirstVisibleItemPosition().coerceAtLeast(0)
+        val cur = pdfView.currentPage
         choose("Какие страницы распознать?", listOf("Текущую (${cur + 1})", "Первые 10", "Указать номера…")) { i ->
             when (i) {
                 0 -> doIt(listOf(cur))
@@ -425,5 +391,10 @@ class PdfViewerActivity : BaseActivity() {
                 }
             }
         }
+    }
+
+    private companion object {
+        /** Ползунок: от 30% (MIN_ZOOM) до 400% (MAX_ZOOM) с шагом 1%. */
+        const val SLIDER_MAX = 370
     }
 }
