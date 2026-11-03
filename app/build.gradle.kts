@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.maysk.scan"
-        minSdk = 23
+        minSdk = 26
         targetSdk = 34
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
@@ -62,7 +62,11 @@ android {
 
     packaging {
         // Сжимать нативные библиотеки внутри APK (файл заметно меньше)
-        jniLibs { useLegacyPackaging = true }
+        jniLibs {
+            useLegacyPackaging = true
+            // OpenDocument.core and LiteRT-LM may both package the NDK C++ runtime.
+            pickFirsts += "**/libc++_shared.so"
+        }
         resources {
             excludes += listOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/*.kotlin_module")
         }
@@ -83,6 +87,11 @@ android {
 }
 
 dependencies {
+    // Полноценный офлайн-движок просмотра и редактирования Office/ODF документов.
+    implementation("app.opendocument:odr-core-android:7.6.1")
+    // Локальная генеративная модель на устройстве (LiteRT-LM).
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
+
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.2")

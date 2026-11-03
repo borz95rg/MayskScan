@@ -59,12 +59,20 @@ class OfficeWorkspaceActivity : BaseActivity() {
         body.addView(text("Офис документов MayskScan", 20f, bold = true))
         body.addView(text("Открывайте локальные документы, редактируйте их без интернета и сохраняйте в исходном формате.", 14f, R.color.text2))
         body.addView(primaryButton("Открыть документ", R.drawable.ic_open) { chooseFile() })
+        body.addView(actionButton("Локальный ИИ-помощник", R.drawable.ic_ai) {
+            startActivity(Intent(this, LocalAiActivity::class.java))
+        })
+        body.addView(actionButton("Лицензии офисного движка и ИИ", R.drawable.ic_doc) {
+            val notices = assets.open("licenses/THIRD_PARTY_NOTICES.md").bufferedReader().use { it.readText() }
+            AlertDialog.Builder(this).setTitle("Сторонние компоненты").setMessage(notices)
+                .setPositiveButton("Закрыть", null).show()
+        })
         body.addView(sectionTitle("ПОДДЕРЖИВАЕМЫЕ ФОРМАТЫ"))
-        body.addView(text("DOCX · XLSX · PPTX · PDF · TXT · CSV · MD · RTF · HTML · JPG · PNG", 14f))
-        body.addView(text("DOCX, XLSX и PPTX: редактор изменяет существующие текстовые узлы внутри исходного Office-пакета. Стили, изображения, формулы, макеты и остальные части документа не пересоздаются.", 12.5f, R.color.text2))
-        body.addView(text("Для сложного форматирования доступно редактирование существующих фрагментов текста; полноценное изменение структуры документа, добавление объектов и слайдов — следующий этап.", 12.5f, R.color.text2))
+        body.addView(text("DOCX · XLSX · PPTX · ODT · ODS · ODP · DOC · XLS · PPT · PDF · TXT · CSV · MD · RTF · HTML · JPG · PNG", 14f))
+        body.addView(text("DOCX, XLSX, PPTX и OpenDocument открываются в визуальном редакторе OpenDocument.core. Сохранение выполняется в исходный формат; доступные операции зависят от типа файла.", 12.5f, R.color.text2))
+        body.addView(text("Старые бинарные DOC/XLS/PPT поддерживаются для просмотра, но не редактирования. Для записи поверх оригинала Android должен разрешить доступ; иначе можно сохранить копию.", 12.5f, R.color.text2))
         body.addView(sectionTitle("ОФЛАЙН-ПОМОЩНИК"))
-        body.addView(text("Сейчас доступны локальные инструменты: краткое содержание, ключевые пункты и определение типа документа. Полноценную локальную нейросеть подключим отдельным модулем после проверки офисного редактора и требований к памяти телефона.", 12.5f, R.color.text2))
+        body.addView(text("Доступны локальные инструменты анализа и отдельный чат с нейросетью LiteRT-LM. Для генеративного ИИ нужно один раз скачать и импортировать файл модели .litertlm; после этого ответы формируются на телефоне без отправки документа в облако.", 12.5f, R.color.text2))
     }
 
     private fun chooseFile() {
@@ -86,6 +94,13 @@ class OfficeWorkspaceActivity : BaseActivity() {
         when (file.extension.lowercase(Locale.ROOT)) {
             "pdf" -> { startActivity(Intent(this, PdfViewerActivity::class.java).putExtra(EXTRA_FILE, file.absolutePath)); finish() }
             "jpg", "jpeg", "png", "webp", "bmp" -> { startActivity(Intent(this, OcrActivity::class.java).putExtra("images", arrayOf(file.absolutePath))); finish() }
+            // DOCX/XLSX/PPTX and ODF are handled by the native OpenDocument.core editor.
+            "docx", "xlsx", "pptx", "odt", "ods", "odp", "doc", "xls", "ppt" -> {
+                startActivity(Intent(this, OfficeEngineActivity::class.java)
+                    .putExtra(EXTRA_FILE, file.absolutePath)
+                    .putExtra("source_uri", sourceUri?.toString()))
+                finish()
+            }
             else -> load(file)
         }
     }

@@ -20,7 +20,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.13"
 
       # Языки распознавания текста (работают без интернета, встраиваются в APK)
       - name: Языки распознавания

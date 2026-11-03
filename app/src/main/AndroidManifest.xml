@@ -203,6 +203,8 @@
         </activity>
 
         <activity android:name=".MainActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".LocalAiActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".OfficeEngineActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".OfficeWorkspaceActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ScanActivity" android:exported="false" />
         <activity android:name=".OcrActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
