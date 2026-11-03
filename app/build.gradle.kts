@@ -10,7 +10,7 @@ val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 
 android {
     namespace = "com.maysk.scan"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.maysk.scan"

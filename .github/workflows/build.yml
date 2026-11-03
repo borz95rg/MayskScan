@@ -22,6 +22,12 @@ jobs:
         with:
           gradle-version: "8.13"
 
+      # Библиотека OpenDocument.core требует Android API 36 для компиляции.
+      - name: Установка Android SDK 36
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36"
+
       # Языки распознавания текста (работают без интернета, встраиваются в APK)
       - name: Языки распознавания
         run: |
