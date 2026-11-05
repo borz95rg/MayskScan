@@ -414,7 +414,7 @@ class OfficeEngineActivity : AppCompatActivity() {
         val html = newService.bringOffline(output.absolutePath)
         val renderedPages = html.pages()
         require(renderedPages.isNotEmpty()) { "Движок не создал страницы документа" }
-        val extracted = renderedPages.joinToString("\n\n") { page ->
+        val extracted = renderedPages.map { page ->
             val listedPage = File(page.path)
             val htmlFile = if (listedPage.isAbsolute) listedPage else File(output, page.path)
             val raw = if (htmlFile.isFile) htmlFile.readText(Charsets.UTF_8) else ""
