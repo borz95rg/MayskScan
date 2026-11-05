@@ -51,7 +51,10 @@ class OfficeWorkspaceActivity : BaseActivity() {
         addTopAction(R.drawable.ic_open) { chooseFile() }
         sourceUri = intent.getStringExtra("source_uri")?.let { runCatching { Uri.parse(it) }.getOrNull() }
         val path = intent.getStringExtra(EXTRA_FILE)
-        if (!path.isNullOrBlank()) dispatch(File(path)) else showStart()
+        if (!path.isNullOrBlank()) dispatch(File(path)) else {
+            showStart()
+            if (intent.getBooleanExtra("auto_pick", false)) chooseFile()
+        }
     }
 
     private fun showStart() {
@@ -85,7 +88,14 @@ class OfficeWorkspaceActivity : BaseActivity() {
             runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
             val result = withContext(Dispatchers.IO) { runCatching { Files.copyToCache(this@OfficeWorkspaceActivity, uri) } }
             hideProgress()
-            result.onSuccess { file -> sourceUri = uri; dispatch(file) }
+            result.onSuccess { file ->
+                sourceUri = uri
+                if (file.extension.lowercase(Locale.ROOT) in Docs.OFFICE_EXT) {
+                    // Документ попадает в раздел «Документы»; правки записываются и в исходный файл
+                    val entry = runCatching { Docs.registerExternal(this@OfficeWorkspaceActivity, file, uri) }.getOrNull()
+                    dispatch(entry?.file ?: file)
+                } else dispatch(file)
+            }
                 .onFailure { toast("Не удалось открыть документ: ${it.message}") }
         }
     }

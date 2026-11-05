@@ -19,7 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** Главный экран с нижним меню: Главная · История · Избранное · Настройки. */
+/** Главный экран с нижним меню: Главная · Документы · История · Настройки. */
 class MainActivity : BaseActivity() {
 
     private lateinit var content: FrameLayout
@@ -27,6 +27,9 @@ class MainActivity : BaseActivity() {
     private var tab = 0
     private var historyQuery = ""
     private var historyFilter: Kind? = null
+    private var historyFavs = false
+    private var docsQuery = ""
+    private var docsFilter = "all"
     private var update: Updater.Info? = null
 
     private val lockSetup = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { render() }
@@ -105,8 +108,8 @@ class MainActivity : BaseActivity() {
         nav.removeAllViews()
         val items = listOf(
             Triple(R.drawable.ic_home, "Главная", 0),
+            Triple(R.drawable.ic_folder, "Документы", 2),
             Triple(R.drawable.ic_history, "История", 1),
-            Triple(R.drawable.ic_star_border, "Избранное", 2),
             Triple(R.drawable.ic_settings, "Настройки", 3),
         )
         for ((icon, label, i) in items) {
@@ -140,8 +143,13 @@ class MainActivity : BaseActivity() {
         when (tab) {
             0 -> home(col)
             1 -> history(col, favoritesOnly = false)
-            2 -> history(col, favoritesOnly = true)
+            2 -> documents(col)
             3 -> settings(col)
+        }
+        if (tab == 2) {
+            content.addView(createButton(), FrameLayout.LayoutParams(dp(58), dp(58), Gravity.END or Gravity.BOTTOM).apply {
+                setMargins(0, 0, dp(18), dp(18))
+            })
         }
     }
 
@@ -195,7 +203,7 @@ class MainActivity : BaseActivity() {
             Tile(R.drawable.ic_edit, R.color.tile_orange, "Заполнить форму", "PDF-бланки") { tool(FormActivity::class.java) },
             Tile(R.drawable.ic_grid, R.color.tile_blue, "Пакетная обработка", "Много фото → один PDF") { startActivity(Intent(this, BatchActivity::class.java)) },
             Tile(R.drawable.ic_mic, R.color.tile_red, "Голос → Текст", "Диктовка в документ") { startActivity(Intent(this, VoiceActivity::class.java)) },
-            Tile(R.drawable.ic_doc, R.color.tile_teal, "Документы", "Word, Excel, PowerPoint и текст") { startActivity(Intent(this, OfficeWorkspaceActivity::class.java)) },
+            Tile(R.drawable.ic_doc, R.color.tile_teal, "Документы", "Word, Excel, PowerPoint") { tab = 2; buildNav(); render() },
         )
         addTiles(col, grid, 2, big = true)
 
@@ -295,8 +303,9 @@ class MainActivity : BaseActivity() {
             val (sc, row) = chipRow()
             val filters = listOf<Pair<String, Kind?>>("Все" to null, "Сканы" to Kind.SCAN, "OCR" to Kind.OCR, "PDF" to Kind.PDF, "QR" to Kind.QR, "Конвертации" to Kind.CONVERT)
             for ((label, k) in filters) {
-                row.addView(chip(label, historyFilter == k) { historyFilter = k; render() }, lp(WRAP, WRAP).apply { rightMargin = dp(8) })
+                row.addView(chip(label, historyFilter == k && !historyFavs) { historyFilter = k; historyFavs = false; render() }, lp(WRAP, WRAP).apply { rightMargin = dp(8) })
             }
+            row.addView(chip("★ Избранное", historyFavs) { historyFavs = !historyFavs; if (historyFavs) historyFilter = null; render() }, lp(WRAP, WRAP).apply { rightMargin = dp(8) })
             col.addView(sc, lp().apply { topMargin = dp(12) })
         }
         col.addView(listBox, lp().apply { topMargin = dp(12) })
@@ -305,7 +314,7 @@ class MainActivity : BaseActivity() {
             job?.cancel()
             val q = historyQuery.trim()
             val base = History.all(this).filter {
-                (!favoritesOnly || it.favorite) && (favoritesOnly || historyFilter == null || it.kind == historyFilter)
+                (!favoritesOnly || it.favorite) && (!historyFavs || it.favorite) && (favoritesOnly || historyFilter == null || it.kind == historyFilter)
             }
             job = lifecycleScope.launch {
                 // Поиск по словам внутри документов — в фоне, из готового индекса
@@ -391,6 +400,244 @@ class MainActivity : BaseActivity() {
                 5 -> confirm("Удалить?", "«${e.name}» будет удалён с телефона.", "Удалить") { History.delete(this, e); render() }
             }
         }
+    }
+
+    // ---------- Документы ----------
+
+    private class SheetRow(
+        val label: String,
+        val sub: String? = null,
+        val icon: Int? = null,
+        val tile: View? = null,
+        val danger: Boolean = false,
+        val action: () -> Unit,
+    )
+
+    private fun typeTile(type: Docs.Type?, size: Int = 46): View {
+        val c = type?.color ?: 0xFF607D9B.toInt()
+        return FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR, intArrayOf(c, darker(c))
+            ).apply { cornerRadius = dpf(size * 0.28f) }
+            addView(text(type?.letter ?: "?", size * 0.46f, R.color.white_fixed, heavy = true).apply { gravity = Gravity.CENTER },
+                FrameLayout.LayoutParams(MATCH, MATCH, Gravity.CENTER))
+            layoutParams = LinearLayout.LayoutParams(dp(size), dp(size))
+        }
+    }
+
+    private fun createButton(): View = FrameLayout(this).apply {
+        background = accentBg(29)
+        elevation = dpf(8f)
+        isClickable = true
+        addView(icon(R.drawable.ic_add, 28, R.color.white_fixed), FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER))
+        setOnClickListener { createSheet() }
+    }
+
+    private fun sheet(title: String, rows: List<SheetRow>, headerTile: View? = null, subtitle: String? = null, withCancel: Boolean = false) {
+        val box = vbox(14).apply { background = cardBg(22, glow = true) }
+        val head = hbox().apply { setPadding(dp(4), dp(2), dp(4), dp(10)) }
+        if (headerTile != null) { head.addView(headerTile); headerTile.margins(this, r = 12) }
+        val ht = vbox()
+        ht.addView(text(title, 17f, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
+        if (subtitle != null) ht.addView(text(subtitle, 12.5f, R.color.text2))
+        head.addView(ht, lp(0, WRAP, 1f))
+        box.addView(head)
+        val dialog = AlertDialog.Builder(this).setView(box).create()
+        for (r in rows) {
+            val row = hbox().apply {
+                setPadding(dp(10), dp(11), dp(10), dp(11))
+                background = clickable(cardBg(14), 14)
+                setOnClickListener { dialog.dismiss(); r.action() }
+            }
+            when {
+                r.tile != null -> { row.addView(r.tile); r.tile.margins(this, r = 12) }
+                r.icon != null -> row.addView(icon(r.icon, 22, if (r.danger) R.color.danger else R.color.accent).apply { margins(this@MainActivity, l = 2, r = 14) })
+            }
+            val t = vbox()
+            t.addView(text(r.label, 15f, if (r.danger) R.color.danger else R.color.text, bold = r.tile != null))
+            if (r.sub != null) t.addView(text(r.sub, 12f, R.color.text2))
+            row.addView(t, lp(0, WRAP, 1f))
+            box.addView(row, lp().apply { topMargin = dp(6) })
+        }
+        if (withCancel) box.addView(secondaryButton("Отмена") { dialog.dismiss() }, lp().apply { topMargin = dp(12) })
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0))
+        dialog.show()
+    }
+
+    private fun createSheet() {
+        sheet("Создать новый файл", listOf(
+            SheetRow("Создать Word", "Новый документ", tile = typeTile(Docs.Type.WORD, 42)) { createDoc(Docs.Type.WORD, "Документ") },
+            SheetRow("Создать Excel", "Таблицу", tile = typeTile(Docs.Type.EXCEL, 42)) { createDoc(Docs.Type.EXCEL, "Таблица") },
+            SheetRow("Создать PowerPoint", "Презентацию", tile = typeTile(Docs.Type.POWERPOINT, 42)) { createDoc(Docs.Type.POWERPOINT, "Презентация") },
+            SheetRow("Создать из скана", "С помощью камеры", tile = iconTile(R.drawable.ic_scan, R.color.tile_purple, 42)) {
+                toast("Отсканируйте страницу, затем в тексте нажмите «Сохранить» → Word")
+                startActivity(Intent(this, OcrActivity::class.java))
+            },
+            SheetRow("Создать из шаблона", "Готовые шаблоны", tile = iconTile(R.drawable.ic_doc, R.color.tile_teal, 42)) { templateSheet() },
+            SheetRow("Открыть с телефона", "DOCX, XLSX, PPTX, ODT…", tile = iconTile(R.drawable.ic_open, R.color.tile_blue, 42)) { pickOfficeDocument() },
+        ), withCancel = true)
+    }
+
+    private fun createDoc(type: Docs.Type, defaultName: String) {
+        ask("Название файла", "Название", defaultName) { n ->
+            val e = runCatching { Docs.create(this, type, n.trim().ifBlank { defaultName }) }
+                .onFailure { fail(it) }.getOrNull() ?: return@ask
+            render()
+            openDoc(e)
+        }
+    }
+
+    private fun templateSheet() {
+        sheet("Шаблоны", Docs.TEMPLATES.map { t ->
+            SheetRow(t.title, t.hint, tile = typeTile(t.type, 42)) { createFromTemplate(t) }
+        }, withCancel = true)
+    }
+
+    private fun createFromTemplate(t: Docs.Template) {
+        val e = runCatching { Docs.createFromTemplate(this, t) }.onFailure { fail(it) }.getOrNull() ?: return
+        render()
+        openDoc(e)
+    }
+
+    private fun pickOfficeDocument() {
+        startActivity(Intent(this, OfficeWorkspaceActivity::class.java).putExtra("auto_pick", true))
+    }
+
+    private fun openDoc(e: Entry) {
+        if (!e.file.exists()) { toast("Файл не найден"); return }
+        startActivity(Intent(this, OfficeEngineActivity::class.java)
+            .putExtra(EXTRA_FILE, e.path)
+            .putExtra("source_uri", Docs.sourceUri(e)))
+    }
+
+    private fun documents(col: LinearLayout) {
+        val head = hbox().apply { setPadding(dp(2), dp(4), 0, dp(12)) }
+        head.addView(iconTile(R.drawable.ic_folder, R.color.tile_blue, 46))
+        val ht = vbox().apply { setPadding(dp(12), 0, 0, 0) }
+        ht.addView(text("Документы", 22f, heavy = true))
+        ht.addView(text("Ваши файлы всегда под рукой", 13f, R.color.text2))
+        head.addView(ht, lp(0, WRAP, 1f))
+        col.addView(head)
+
+        val search = field("Поиск по названию и содержимому…", docsQuery)
+        col.addView(search)
+
+        val (sc, row) = chipRow()
+        val filters = listOf("all" to "Все", "word" to "Word", "excel" to "Excel", "ppt" to "PowerPoint",
+            "templates" to "Шаблоны", "recent" to "Недавние", "fav" to "★ Избранное")
+        for ((key, label) in filters) {
+            row.addView(chip(label, docsFilter == key) { docsFilter = key; render() }, lp(WRAP, WRAP).apply { rightMargin = dp(8) })
+        }
+        col.addView(sc, lp().apply { topMargin = dp(12) })
+
+        val listBox = vbox()
+        col.addView(listBox, lp().apply { topMargin = dp(12); bottomMargin = dp(80) })
+
+        if (docsFilter == "templates") {
+            Docs.TEMPLATES.forEach { t ->
+                val card = hbox().apply {
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    background = clickable(cardBg(16), 16)
+                    setOnClickListener { createFromTemplate(t) }
+                }
+                card.addView(typeTile(t.type, 44))
+                val tx = vbox().apply { setPadding(dp(12), 0, dp(6), 0) }
+                tx.addView(text(t.title, 15f, bold = true))
+                tx.addView(text("${t.type.title} · ${t.hint}", 12f, R.color.text2))
+                card.addView(tx, lp(0, WRAP, 1f))
+                card.addView(icon(R.drawable.ic_add, 22, R.color.accent))
+                listBox.addView(card, lp().apply { bottomMargin = dp(8) })
+            }
+            search.visibility = View.GONE
+            return
+        }
+
+        var job: kotlinx.coroutines.Job? = null
+        fun fill() {
+            job?.cancel()
+            val q = docsQuery.trim()
+            var base = Docs.list(this).sortedByDescending { it.file.lastModified() }
+            base = when (docsFilter) {
+                "word" -> base.filter { Docs.typeOf(it.file.name) == Docs.Type.WORD }
+                "excel" -> base.filter { Docs.typeOf(it.file.name) == Docs.Type.EXCEL }
+                "ppt" -> base.filter { Docs.typeOf(it.file.name) == Docs.Type.POWERPOINT }
+                "recent" -> base.take(10)
+                "fav" -> base.filter { it.favorite }
+                else -> base
+            }
+            job = lifecycleScope.launch {
+                val found: List<Pair<Entry, String?>> = if (q.isEmpty()) base.map { it to null } else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    base.mapNotNull { e ->
+                        if (e.name.contains(q, true)) e to null
+                        else TextIndex.get(this@MainActivity, e)?.let { t -> TextIndex.snippet(t, q) }?.let { e to it }
+                    }
+                }
+                listBox.removeAllViews()
+                if (found.isEmpty()) {
+                    listBox.addView(text(when {
+                        q.isNotEmpty() -> "Ничего не найдено по «$q»."
+                        docsFilter == "fav" -> "В избранном пока пусто.\nДолгое нажатие на файл → «Добавить в избранное»."
+                        else -> "Документов пока нет.\nНажмите «+», чтобы создать Word, Excel или PowerPoint."
+                    }, 15f, R.color.text2).apply { gravity = Gravity.CENTER; setPadding(0, dp(50), 0, 0) })
+                }
+                found.forEach { (e, snip) -> listBox.addView(docCard(e, snip), lp().apply { bottomMargin = dp(8) }) }
+            }
+        }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) { docsQuery = s?.toString() ?: ""; fill() }
+        })
+        fill()
+    }
+
+    private fun docCard(e: Entry, snippet: String?): View {
+        val card = hbox().apply {
+            setPadding(dp(12), dp(11), dp(8), dp(11))
+            background = clickable(cardBg(18), 18)
+            setOnClickListener { openDoc(e) }
+            setOnLongClickListener { docMenu(e); true }
+        }
+        card.addView(typeTile(Docs.typeOf(e.file.name)))
+        val t = vbox().apply { setPadding(dp(12), 0, dp(6), 0) }
+        t.addView(text(e.name, 15f, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
+        t.addView(text("${formatSize(e.size)} • ${Docs.dateLabel(e.file.lastModified())}", 12f, R.color.text2).apply { maxLines = 1 })
+        if (snippet != null) t.addView(text("«$snippet»", 12f, R.color.accent).apply { maxLines = 2; setPadding(0, dp(2), 0, 0) })
+        card.addView(t, lp(0, WRAP, 1f))
+        val right = vbox().apply { gravity = Gravity.END }
+        right.addView(iconButton(R.drawable.ic_more, R.color.text2) { docMenu(e) })
+        val cloud = Docs.isCloud(e)
+        right.addView(text(if (cloud) "☁ Облако" else "▫ Локально", 11.5f, if (cloud) R.color.accent else R.color.text2).apply { setPadding(0, 0, dp(6), 0) })
+        card.addView(right)
+        if (e.favorite) (t.getChildAt(0) as? android.widget.TextView)?.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_star, 0)
+        return card
+    }
+
+    private fun docMenu(e: Entry) {
+        val type = Docs.typeOf(e.file.name)
+        sheet(e.name, listOf(
+            SheetRow("Открыть", icon = R.drawable.ic_open) { openDoc(e) },
+            SheetRow("Переименовать", icon = R.drawable.ic_edit) {
+                ask("Новое название", "Название", Files.baseName(e.file.name)) { n ->
+                    if (n.isNotBlank()) {
+                        if (!Docs.rename(this, e, n.trim())) toast("Не удалось переименовать: такое имя уже есть")
+                        render()
+                    }
+                }
+            },
+            SheetRow("Дублировать", icon = R.drawable.ic_copy) {
+                runCatching { Docs.duplicate(this, e) }.onFailure { fail(it) }
+                render()
+            },
+            SheetRow("Поделиться", icon = R.drawable.ic_share) { share(listOf(e.file), Files.mimeOf(e.file.name)) },
+            SheetRow(if (e.favorite) "Убрать из избранного" else "Добавить в избранное",
+                icon = if (e.favorite) R.drawable.ic_star else R.drawable.ic_star_border) {
+                e.favorite = !e.favorite; History.update(this, e); render()
+            },
+            SheetRow("Удалить", icon = R.drawable.ic_delete, danger = true) {
+                confirm("Удалить?", "«${e.name}» будет удалён с телефона.", "Удалить") { History.delete(this, e); render() }
+            },
+        ), headerTile = typeTile(type, 42), subtitle = formatSize(e.size))
     }
 
     // ---------- Настройки ----------

@@ -49,6 +49,7 @@ class LocalAiActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         documentContext = intent.getStringExtra("document_text").orEmpty().take(4500)
         buildUi()
+        intent.getStringExtra("prompt")?.takeIf { it.isNotBlank() }?.let { question.setText(it) }
         val saved = getSharedPreferences("local_ai", MODE_PRIVATE).getString("model_path", null)
         modelFile = saved?.let(::File)?.takeIf { it.isFile && it.length() > 0 }
         updateModelStatus()

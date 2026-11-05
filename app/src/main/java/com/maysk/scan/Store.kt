@@ -150,6 +150,15 @@ object History {
         save(ctx)
     }
 
+    /** Файл переименован: запись остаётся той же (id, избранное), меняются имя и путь. */
+    @Synchronized
+    fun renameFile(ctx: Context, e: Entry, newFile: File) {
+        val list = load(ctx)
+        val i = list.indexOfFirst { it.id == e.id }
+        if (i >= 0) list[i] = e.copy(name = newFile.name, path = newFile.absolutePath)
+        save(ctx)
+    }
+
     @Synchronized
     fun findByPath(ctx: Context, path: String): Entry? = load(ctx).firstOrNull { it.path == path }
 
