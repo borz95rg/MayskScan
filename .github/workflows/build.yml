@@ -7,6 +7,9 @@ on:
       - "**.md"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -93,10 +96,12 @@ jobs:
           name: MayskScan-32bit.apk
           path: MayskScan-32bit.apk
 
-      # Обновление для всех телефонов: APK в облачной базе + номер версии
+      # Обновление для всех телефонов: APK кладём в GitHub Releases (лимит 2 ГБ на файл),
+      # а в Supabase пишем только номер версии и ссылку на APK
       - name: Публикация обновления
         env:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$SIGNED" != "1" ] || [ -z "$SUPABASE_SERVICE_KEY" ]; then
             echo "::warning::Публикация пропущена (нужны ключ подписи и SUPABASE_SERVICE_KEY)."
@@ -104,17 +109,14 @@ jobs:
           fi
           URL=$(grep '^mayskscan.supabaseUrl=' gradle.properties | cut -d= -f2-)
           KEY="$SUPABASE_SERVICE_KEY"
-          for F in MayskScan.apk MayskScan-32bit.apk; do
-            curl -sS --fail-with-body -X POST "$URL/storage/v1/object/releases/$F" \
-              -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "x-upsert: true" \
-              -H "Content-Type: application/vnd.android.package-archive" --data-binary @$F
-            echo
-          done
           CODE=${{ github.run_number }}
+          gh release view latest >/dev/null 2>&1 || gh release create latest --title "Maysk Scan (последняя версия)" --notes "Автоматическая сборка"
+          gh release upload latest MayskScan.apk MayskScan-32bit.apk --clobber
+          APK_URL="https://github.com/${{ github.repository }}/releases/download/latest/MayskScan.apk"
           curl -sS --fail-with-body -X POST "$URL/rest/v1/app_settings?on_conflict=key" \
             -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
             -H "Content-Type: application/json" -H "Prefer: resolution=merge-duplicates,return=minimal" \
-            -d "[{\"key\":\"scan_apk_url\",\"value\":\"$URL/storage/v1/object/public/releases/MayskScan.apk\"},
+            -d "[{\"key\":\"scan_apk_url\",\"value\":\"$APK_URL\"},
                  {\"key\":\"scan_version_name\",\"value\":\"1.0.$CODE\"},
                  {\"key\":\"scan_version_code\",\"value\":\"$CODE\"}]"
-          echo "Опубликовано: $URL/storage/v1/object/public/releases/MayskScan.apk"
+          echo "Опубликовано: $APK_URL"
