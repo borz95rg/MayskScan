@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -41,6 +42,26 @@ class PdfRender(val file: File) : Closeable {
         }
     }
 
+    /**
+     * Только часть страницы — для чёткого текста при сильном увеличении.
+     * [pxPerPoint] — пикселей на пункт страницы; [left]/[top] — смещение фрагмента
+     * от левого верхнего угла страницы в пикселях при этом масштабе.
+     */
+    @Synchronized
+    fun renderRegion(index: Int, pxPerPoint: Float, left: Float, top: Float, w: Int, h: Int, night: Boolean = false): Bitmap {
+        renderer.openPage(index).use { page ->
+            val bmp = Bitmap.createBitmap(max(1, w), max(1, h), Bitmap.Config.ARGB_8888)
+            bmp.eraseColor(Color.WHITE)
+            val m = Matrix()
+            m.setScale(pxPerPoint, pxPerPoint)
+            m.postTranslate(-left, -top)
+            page.render(bmp, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            return if (night) invert(bmp) else bmp
+        }
+    }
+
+    // Синхронно с render: не закрываем рендерер, пока страница ещё рисуется в другом потоке.
+    @Synchronized
     override fun close() {
         try { renderer.close() } catch (e: Exception) {}
         try { fd.close() } catch (e: Exception) {}

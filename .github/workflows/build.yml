@@ -23,10 +23,23 @@ jobs:
           gradle-version: "8.13"
 
       # Библиотека OpenDocument.core требует Android API 36 для компиляции.
+      # На новых образах runner (ubuntu-26.04) Android SDK не установлен — ставим сами, если sdkmanager не найден.
       - name: Установка Android SDK 36
         run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platforms;android-36"
+          export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
+          if ! command -v sdkmanager >/dev/null 2>&1 && [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/cmdline-tools.zip" \
+              https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$RUNNER_TEMP/cmdline-tools"
+            rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+            mv "$RUNNER_TEMP/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          SDKMANAGER="$(command -v sdkmanager || echo "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager")"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-36"
 
       # Языки распознавания текста (работают без интернета, встраиваются в APK)
       - name: Языки распознавания

@@ -1,7 +1,17 @@
 package com.maysk.scan
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.RippleDrawable
+import android.text.TextUtils
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.HorizontalScrollView
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.JavascriptInterface
@@ -34,6 +44,10 @@ class OfficeEngineActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var titleView: TextView
     private lateinit var pageBar: LinearLayout
+    private lateinit var pageScroll: HorizontalScrollView
+    private val ribbonButtons = ArrayList<TextView>()
+    private var accent = 0xFF2B579A.toInt()   // цвет приложения: Word / Excel / PowerPoint
+    private var appName = "Word"
     private lateinit var saveButton: Button
     private var decoded: DecodedFile? = null
     private var documentFile: DocumentFile? = null
@@ -82,6 +96,11 @@ class OfficeEngineActivity : AppCompatActivity() {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }
         }
+        when (sourceFile?.extension?.lowercase()) {
+            "xlsx", "xls", "ods", "csv" -> { accent = 0xFF217346.toInt(); appName = "Excel" }
+            "pptx", "ppt", "odp" -> { accent = 0xFFB7472A.toInt(); appName = "PowerPoint" }
+            else -> { accent = 0xFF2B579A.toInt(); appName = "Word" }
+        }
         buildUi()
         val file = sourceFile
         if (file == null || !file.exists()) { toast("Файл не найден"); finish(); return }
@@ -89,33 +108,92 @@ class OfficeEngineActivity : AppCompatActivity() {
         openDocument(file)
     }
 
-    private fun buildUi() {
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE) }
-        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(8, 8, 8, 8) }
-        titleView = TextView(this).apply { textSize = 16f; setTextColor(Color.BLACK); maxLines = 1 }
-        top.addView(titleView, LinearLayout.LayoutParams(0, 48, 1f))
-        saveButton = Button(this).apply { text = "Сохранить"; isEnabled = false; setOnClickListener { requestSave() } }
-        top.addView(saveButton)
-        root.addView(top)
-        pageBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(8, 0, 8, 4) }
-        root.addView(pageBar)
-        val formatBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(6, 0, 6, 4) }
-        listOf(
-            "B" to "odr.editing.toggle('bold')",
-            "I" to "odr.editing.toggle('italic')",
-            "U" to "odr.editing.toggle('underline')",
-            "↶" to "odr.editing.undo()",
-            "↷" to "odr.editing.redo()",
-        ).forEach { (label, command) ->
-            formatBar.addView(Button(this).apply {
-                text = label
-                minWidth = 48
-                setOnClickListener { runEditorCommand(command) }
-            }, LinearLayout.LayoutParams(0, 40, 1f))
+    private fun ripple(base: Int, rippleColor: Int): Drawable =
+        RippleDrawable(ColorStateList.valueOf(rippleColor), ColorDrawable(base), ColorDrawable(Color.WHITE))
+
+    /** Кнопка ленты: плоская, как в Office. Работает только то, что поддерживает движок. */
+    private fun ribbonButton(label: String, style: Int = Typeface.NORMAL, underline: Boolean = false, color: Int = 0xFF333333.toInt(), onClick: () -> Unit): TextView =
+        TextView(this).apply {
+            text = label
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(color)
+            setTypeface(Typeface.DEFAULT, style)
+            if (underline) paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
+            background = ripple(0xFFF3F3F3.toInt(), 0x33000000)
+            setOnClickListener { onClick() }
         }
-        root.addView(formatBar)
+
+    private fun buildUi() {
+        window.statusBarColor = accent
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(0xFFE9E9E9.toInt()) }
+
+        // Заголовок в цвете приложения: название, имя файла, «Сохранить»
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(accent)
+            setPadding(dp(14), dp(6), dp(6), dp(6))
+        }
+        val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        names.addView(TextView(this).apply { text = appName; textSize = 11f; setTextColor(0xCCFFFFFF.toInt()) })
+        titleView = TextView(this).apply {
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+        }
+        names.addView(titleView)
+        top.addView(names, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        saveButton = Button(this).apply {
+            text = "Сохранить"
+            isAllCaps = false
+            textSize = 14f
+            isEnabled = false
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(ColorStateList(
+                arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+                intArrayOf(0x88FFFFFF.toInt(), Color.WHITE)))
+            background = ripple(accent, 0x44FFFFFF)
+            setOnClickListener { requestSave() }
+        }
+        top.addView(saveButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
+        root.addView(top)
+
+        // Лента: форматирование и отмена действий + помощник
+        val ribbon = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(0xFFF3F3F3.toInt())
+            setPadding(dp(6), dp(2), dp(6), dp(2))
+        }
+        fun cmd(label: String, style: Int, underline: Boolean, command: String) {
+            val b = ribbonButton(label, style, underline) { runEditorCommand(command) }
+            ribbonButtons.add(b)
+            ribbon.addView(b, LinearLayout.LayoutParams(dp(44), dp(40)))
+        }
+        fun separator() {
+            ribbon.addView(View(this).apply { setBackgroundColor(0xFFCFCFCF.toInt()) },
+                LinearLayout.LayoutParams(dp(1), dp(22)).apply { setMargins(dp(6), 0, dp(6), 0) })
+        }
+        cmd("B", Typeface.BOLD, false, "odr.editing.toggle('bold')")
+        cmd("I", Typeface.ITALIC, false, "odr.editing.toggle('italic')")
+        cmd("U", Typeface.NORMAL, true, "odr.editing.toggle('underline')")
+        separator()
+        cmd("↶", Typeface.NORMAL, false, "odr.editing.undo()")
+        cmd("↷", Typeface.NORMAL, false, "odr.editing.redo()")
+        ribbon.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        ribbon.addView(
+            ribbonButton("ИИ", Typeface.BOLD, color = accent) {
+                startActivity(Intent(this, LocalAiActivity::class.java).putExtra("document_text", documentText))
+            }.apply { textSize = 15f },
+            LinearLayout.LayoutParams(dp(52), dp(40)))
+        root.addView(ribbon)
+        root.addView(View(this).apply { setBackgroundColor(0xFFD0D0D0.toInt()) }, LinearLayout.LayoutParams(-1, dp(1)))
+
         web = WebView(this).apply {
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(0xFFE9E9E9.toInt())
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
@@ -145,12 +223,17 @@ class OfficeEngineActivity : AppCompatActivity() {
             addJavascriptInterface(EditBridge(), "MayskOffice")
         }
         root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
-        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(8, 4, 8, 8) }
-        val ai = Button(this).apply { text = "Спросить локальный ИИ"; setOnClickListener {
-            startActivity(Intent(this@OfficeEngineActivity, LocalAiActivity::class.java).putExtra("document_text", documentText))
-        } }
-        bottom.addView(ai, LinearLayout.LayoutParams(-1, 48))
-        root.addView(bottom)
+
+        // Вкладки листов / слайдов снизу, как в Excel; для документа из одной страницы скрыты
+        pageScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            setBackgroundColor(0xFFF3F3F3.toInt())
+            visibility = View.GONE
+        }
+        pageBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        pageScroll.addView(pageBar, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.addView(View(this).apply { setBackgroundColor(0xFFD0D0D0.toInt()) }, LinearLayout.LayoutParams(-1, dp(1)))
+        root.addView(pageScroll, LinearLayout.LayoutParams(-1, dp(40)))
         setContentView(root)
     }
 
@@ -173,6 +256,7 @@ class OfficeEngineActivity : AppCompatActivity() {
             }.onSuccess {
                 saveButton.isEnabled = editable
                 saveButton.text = if (editable) "Сохранить" else "Только просмотр"
+                ribbonButtons.forEach { it.alpha = if (editable) 1f else 0.4f }
                 renderPageTabs()
                 showPage(0)
                 if (!editable) toast("Формат открыт для просмотра: сохранение правок недоступно")
@@ -185,19 +269,35 @@ class OfficeEngineActivity : AppCompatActivity() {
 
     private fun renderPageTabs() {
         pageBar.removeAllViews()
+        pageScroll.visibility = if (pages.size > 1) View.VISIBLE else View.GONE
         pages.forEachIndexed { index, page ->
-            val button = Button(this).apply {
-                text = page.name.take(12).ifBlank { "${index + 1}" }
-                textSize = 11f
+            val tab = TextView(this).apply {
+                text = page.name.take(16).ifBlank { "${index + 1}" }
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setPadding(dp(16), 0, dp(16), 0)
                 setOnClickListener { requestPage(index) }
             }
-            pageBar.addView(button, LinearLayout.LayoutParams(0, 42, 1f))
+            pageBar.addView(tab, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        styleTabs()
+    }
+
+    /** Активная вкладка — белая, цвета приложения; остальные серые. */
+    private fun styleTabs() {
+        for (i in 0 until pageBar.childCount) {
+            val tab = pageBar.getChildAt(i) as? TextView ?: continue
+            val selected = i == currentPage
+            tab.setBackgroundColor(if (selected) Color.WHITE else Color.TRANSPARENT)
+            tab.setTextColor(if (selected) accent else 0xFF555555.toInt())
+            tab.setTypeface(Typeface.DEFAULT, if (selected) Typeface.BOLD else Typeface.NORMAL)
         }
     }
 
     private fun showPage(index: Int) {
         if (index !in pages.indices) return
         currentPage = index
+        styleTabs()
         webReady = false
         if (editable) saveButton.isEnabled = false
         val listed = File(pages[index].path)
