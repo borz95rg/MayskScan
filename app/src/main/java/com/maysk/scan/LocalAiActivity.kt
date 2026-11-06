@@ -3,16 +3,21 @@ package com.maysk.scan
 import android.app.ActivityManager
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.content.res.ColorStateList
+import android.view.inputmethod.EditorInfo
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -28,6 +33,13 @@ import java.util.concurrent.Executors
 
 /** Optional fully on-device assistant. The model is imported by the user and never bundled in APK. */
 class LocalAiActivity : AppCompatActivity() {
+    private val bg = Color.rgb(7, 16, 30)
+    private val panel = Color.rgb(13, 27, 48)
+    private val card = Color.rgb(18, 41, 74)
+    private val stroke = Color.rgb(35, 73, 126)
+    private val text = Color.rgb(233, 242, 255)
+    private val muted = Color.rgb(142, 165, 198)
+    private val accent = Color.rgb(43, 123, 255)
     private lateinit var modelStatus: TextView
     private lateinit var answer: TextView
     private lateinit var question: EditText
@@ -58,63 +70,84 @@ class LocalAiActivity : AppCompatActivity() {
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(16, 12, 16, 12)
-            setBackgroundColor(Color.WHITE)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setBackgroundColor(bg)
         }
         root.addView(TextView(this).apply {
             text = "Локальный ИИ MayskScan"
-            textSize = 21f
-            setTextColor(Color.BLACK)
+            textSize = 21f; setTextColor(text); setTypeface(typeface, Typeface.BOLD)
         })
         root.addView(TextView(this).apply {
-            text = "Модель работает на телефоне. После импорта ей не нужен интернет; документ не отправляется в облако. В запрос попадает до 4 500 символов текста документа. При импорте модель копируется в папку приложения; скачанный файл после импорта можно удалить."
+            text = "Модель работает на телефоне без отправки документа в облако. В контекст запроса попадут первые 4 500 символов. Импортированную модель можно удалить из загрузок."
             textSize = 13f
-            setTextColor(Color.DKGRAY)
-            setPadding(0, 8, 0, 8)
+            setTextColor(muted)
+            setPadding(0, dp(8), 0, dp(10))
         })
-        modelStatus = TextView(this).apply { textSize = 13f; setTextColor(Color.DKGRAY) }
-        root.addView(modelStatus)
-        root.addView(Button(this).apply {
-            text = "Страница модели Qwen3-0.6B (около 614 МБ)"
-            setOnClickListener {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/litert-community/Qwen3-0.6B/tree/main")))
-            }
-        })
-        root.addView(Button(this).apply {
-            text = "Выбрать скачанный файл .litertlm"
-            setOnClickListener { chooseModel.launch(arrayOf("*/*")) }
-        })
+        val modelCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(panel, stroke, 16)
+        }
+        modelStatus = TextView(this).apply { textSize = 13f; setTextColor(muted) }
+        modelCard.addView(modelStatus)
+        val modelActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        modelActions.addView(actionButton("Выбрать модель") { chooseModel.launch(arrayOf("*/*")) }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        modelActions.addView(actionButton("Скачать…") {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/litert-community/Qwen3-0.6B/tree/main")))
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(8) })
+        modelCard.addView(modelActions)
+        root.addView(modelCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
         answer = TextView(this).apply {
             textSize = 15f
-            setTextColor(Color.BLACK)
-            setPadding(12, 12, 12, 12)
+            setTextColor(text)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
             text = if (documentContext.isBlank()) "Задайте вопрос модели." else "Документ прикреплён к контексту (${documentContext.length} символов). Задайте вопрос."
         }
+        val answerCard = LinearLayout(this).apply { setPadding(dp(1), dp(1), dp(1), dp(1)); background = rounded(panel, stroke, 18) }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(answer) }
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(Button(this).apply {
-            text = "Скопировать ответ"
-            setOnClickListener {
+        answerCard.addView(scroll, LinearLayout.LayoutParams(-1, -1))
+        root.addView(answerCard, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(10) })
+        root.addView(actionButton("Скопировать ответ") {
+            val value = answer.text.toString().trim()
+            if (value.isBlank()) toast("Ответа пока нет") else {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("MayskScan AI", answer.text))
-                toast("Ответ скопирован — его можно вставить в документ")
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("MayskScan AI", value))
+                toast("Ответ скопирован. Вернитесь в документ и вставьте его.")
             }
-        })
+        }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(8) })
         question = EditText(this).apply {
             hint = "Например: кратко объясни документ и найди риски…"
             minLines = 2
             maxLines = 5
             gravity = Gravity.TOP
-            setTextColor(Color.BLACK)
+            textSize = 15f
+            setTextColor(text); setHintTextColor(muted)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(card, stroke, 14)
+            imeOptions = EditorInfo.IME_ACTION_SEND
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEND) { askModel(); true } else false
+            }
         }
-        root.addView(question)
-        send = Button(this).apply {
-            text = "Спросить"
-            isEnabled = false
-            setOnClickListener { askModel() }
-        }
-        root.addView(send)
+        root.addView(question, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        send = actionButton("Спросить модель", primary = true) { askModel() }.apply { isEnabled = false }
+        root.addView(send, LinearLayout.LayoutParams(-1, dp(48)))
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         setContentView(root)
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun rounded(color: Int, border: Int, radius: Int) = GradientDrawable().apply {
+        cornerRadius = dp(radius).toFloat(); setColor(color); setStroke(dp(1), border)
+    }
+
+    private fun actionButton(label: String, primary: Boolean = false, onClick: () -> Unit): Button = Button(this).apply {
+        text = label; textSize = 14f; isAllCaps = false; setTextColor(text)
+        backgroundTintList = ColorStateList.valueOf(if (primary) accent else card)
+        background = rounded(if (primary) accent else card, if (primary) accent else stroke, 13)
+        setOnClickListener { onClick() }
     }
 
     private fun importModel(uri: Uri) {
