@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -37,7 +36,7 @@ class LocalAiActivity : AppCompatActivity() {
     private val panel = Color.rgb(13, 27, 48)
     private val card = Color.rgb(18, 41, 74)
     private val stroke = Color.rgb(35, 73, 126)
-    private val text = Color.rgb(233, 242, 255)
+    private val textColor = Color.rgb(233, 242, 255)
     private val muted = Color.rgb(142, 165, 198)
     private val accent = Color.rgb(43, 123, 255)
     private lateinit var modelStatus: TextView
@@ -75,7 +74,7 @@ class LocalAiActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = "Локальный ИИ MayskScan"
-            textSize = 21f; setTextColor(text); setTypeface(typeface, Typeface.BOLD)
+            textSize = 21f; setTextColor(textColor); setTypeface(typeface, Typeface.BOLD)
         })
         root.addView(TextView(this).apply {
             text = "Модель работает на телефоне без отправки документа в облако. В контекст запроса попадут первые 4 500 символов. Импортированную модель можно удалить из загрузок."
@@ -98,7 +97,7 @@ class LocalAiActivity : AppCompatActivity() {
         root.addView(modelCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
         answer = TextView(this).apply {
             textSize = 15f
-            setTextColor(text)
+            setTextColor(textColor)
             setPadding(dp(14), dp(14), dp(14), dp(14))
             text = if (documentContext.isBlank()) "Задайте вопрос модели." else "Документ прикреплён к контексту (${documentContext.length} символов). Задайте вопрос."
         }
@@ -120,7 +119,7 @@ class LocalAiActivity : AppCompatActivity() {
             maxLines = 5
             gravity = Gravity.TOP
             textSize = 15f
-            setTextColor(text); setHintTextColor(muted)
+            setTextColor(textColor); setHintTextColor(muted)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = rounded(card, stroke, 14)
             imeOptions = EditorInfo.IME_ACTION_SEND
@@ -144,7 +143,7 @@ class LocalAiActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, primary: Boolean = false, onClick: () -> Unit): Button = Button(this).apply {
-        text = label; textSize = 14f; isAllCaps = false; setTextColor(text)
+        text = label; textSize = 14f; isAllCaps = false; setTextColor(textColor)
         backgroundTintList = ColorStateList.valueOf(if (primary) accent else card)
         background = rounded(if (primary) accent else card, if (primary) accent else stroke, 13)
         setOnClickListener { onClick() }
