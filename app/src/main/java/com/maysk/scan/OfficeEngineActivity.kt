@@ -67,6 +67,7 @@ class OfficeEngineActivity : AppCompatActivity() {
     private lateinit var toolsRow: LinearLayout
     private lateinit var topBar: LinearLayout
     private lateinit var ribbonBox: LinearLayout
+    private lateinit var legacyReadOnlyNotice: TextView
     private lateinit var bottomBox: LinearLayout
     private lateinit var saveBtn: View
     private lateinit var prevBtn: TextView
@@ -262,7 +263,7 @@ class OfficeEngineActivity : AppCompatActivity() {
                 setOnClickListener { startSlideshow() }
             })
         }
-        saveBtn = topIcon(R.drawable.ic_save) { requestSave() }.apply { alpha = 0.4f }
+        saveBtn = topIcon(R.drawable.ic_cloud_done) { requestSave() }.apply { alpha = 0.4f }
         topBar.addView(saveBtn)
         topBar.addView(topIcon(R.drawable.ic_more) { showMenu() })
         main.addView(topBar)
@@ -281,6 +282,15 @@ class OfficeEngineActivity : AppCompatActivity() {
         }
         toolsScroll.addView(toolsRow)
         ribbonBox.addView(toolsScroll)
+        legacyReadOnlyNotice = TextView(this).apply {
+            text = "Старый формат открыт только для просмотра"
+            textSize = 12f
+            setTextColor(0xFFFFD27A.toInt())
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(2), dp(10), dp(2))
+            visibility = View.GONE
+        }
+        ribbonBox.addView(legacyReadOnlyNotice, LinearLayout.LayoutParams(-1, dp(30)))
         main.addView(ribbonBox)
         main.addView(View(this).apply { setBackgroundColor(STROKE) }, LinearLayout.LayoutParams(-1, dp(1)))
         renderRibbon()
@@ -469,6 +479,8 @@ class OfficeEngineActivity : AppCompatActivity() {
             parts.add("Σ Сумма: ${fmt(n.sum())}")
             parts.add("Среднее: ${fmt(n.average())}")
             parts.add("Количество: ${n.size}")
+        } else if (appName == "Excel") {
+            parts.add("Выделите ячейки для сводки")
         } else {
             parts.add("$words слов")
         }
@@ -518,6 +530,8 @@ class OfficeEngineActivity : AppCompatActivity() {
                     documentText = rendered.extractedText
                 }
             }.onSuccess {
+                val legacyFormat = sourceFile?.extension?.lowercase()?.let { it in setOf("doc", "xls", "ppt") } == true
+                legacyReadOnlyNotice.visibility = if (!editable && legacyFormat) View.VISIBLE else View.GONE
                 setSaveEnabled(editable)
                 toolViews.forEach { it.alpha = if (editable) 1f else 0.4f }
                 renderPageTabs()
