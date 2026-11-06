@@ -68,6 +68,7 @@ class OfficeEngineActivity : AppCompatActivity() {
     private lateinit var topBar: LinearLayout
     private lateinit var ribbonBox: LinearLayout
     private lateinit var legacyReadOnlyNotice: TextView
+    private lateinit var editingHint: TextView
     private lateinit var bottomBox: LinearLayout
     private lateinit var saveBtn: View
     private lateinit var prevBtn: TextView
@@ -291,6 +292,19 @@ class OfficeEngineActivity : AppCompatActivity() {
             visibility = View.GONE
         }
         ribbonBox.addView(legacyReadOnlyNotice, LinearLayout.LayoutParams(-1, dp(30)))
+        editingHint = TextView(this).apply {
+            textSize = 11.5f
+            setTextColor(TXT2)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), 0, dp(10), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = dpf(10f); setColor(CARD); setStroke(dp(1), STROKE)
+            }
+            visibility = View.GONE
+        }
+        ribbonBox.addView(editingHint, LinearLayout.LayoutParams(-1, dp(30)).apply {
+            setMargins(dp(8), 0, dp(8), dp(6))
+        })
         main.addView(ribbonBox)
         main.addView(View(this).apply { setBackgroundColor(STROKE) }, LinearLayout.LayoutParams(-1, dp(1)))
         renderRibbon()
@@ -532,6 +546,12 @@ class OfficeEngineActivity : AppCompatActivity() {
             }.onSuccess {
                 val legacyFormat = sourceFile?.extension?.lowercase()?.let { it in setOf("doc", "xls", "ppt") } == true
                 legacyReadOnlyNotice.visibility = if (!editable && legacyFormat) View.VISIBLE else View.GONE
+                editingHint.text = when (appName) {
+                    "Excel" -> "Дважды коснитесь ячейки для ввода · Enter — подтвердить"
+                    "PowerPoint" -> "Нажмите в текст и печатайте · Enter — новый абзац"
+                    else -> "Нажмите в документ и печатайте · Enter — новый абзац"
+                }
+                editingHint.visibility = if (editable) View.VISIBLE else View.GONE
                 setSaveEnabled(editable)
                 toolViews.forEach { it.alpha = if (editable) 1f else 0.4f }
                 renderPageTabs()
