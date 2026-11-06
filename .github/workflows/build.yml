@@ -5,6 +5,8 @@ on:
     branches: [main, master]
     paths-ignore:
       - "**.md"
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -99,6 +101,7 @@ jobs:
       # Обновление для всех телефонов: APK кладём в GitHub Releases (лимит 2 ГБ на файл),
       # а в Supabase пишем только номер версии и ссылку на APK
       - name: Публикация обновления
+        if: github.event_name != 'pull_request'
         env:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GH_TOKEN: ${{ github.token }}
